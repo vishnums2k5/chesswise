@@ -161,39 +161,52 @@ export default function ChessBoard3D({
   useEffect(() => {
     const map = fenToPieceMap(fen);
 
-    // Very simple diff: just recreate all for now, but to animate properly we need stable IDs.
-    // For a real robust diff, we compare old pieces to new map.
     setPieces((prev) => {
-      const next: PieceData[] = [];
       const usedIds = new Set<string>();
 
-      // For each square in the new FEN
-      Object.entries(map).forEach(([sq, pStr]) => {
-        if (!pStr) return;
-        const color = pStr === pStr.toUpperCase() ? 'w' : 'b';
-        const type = pStr.toLowerCase();
+      const newPieces = Object.entries(map)
+        .filter(([_, pStr]) => pStr)
+        .map(([sq, pStr]) => ({
+          square: sq as Square,
+          type: pStr!.toLowerCase(),
+          color: (pStr === pStr!.toUpperCase() ? 'w' : 'b') as 'w' | 'b',
+          id: '',
+        }));
 
-        // Find if this exact piece existed on this square previously
-        let existing = prev.find(
-          (p) => p.square === sq && p.type === type && p.color === color && !usedIds.has(p.id),
+      // Pass 1: Exact matches (pieces that stayed on the same square)
+      newPieces.forEach((newP) => {
+        const existing = prev.find(
+          (p) =>
+            p.square === newP.square &&
+            p.type === newP.type &&
+            p.color === newP.color &&
+            !usedIds.has(p.id),
         );
-
-        // If not, maybe it moved here?
-        if (!existing) {
-          existing = prev.find((p) => p.type === type && p.color === color && !usedIds.has(p.id));
-        }
-
         if (existing) {
           usedIds.add(existing.id);
-          next.push({ ...existing, square: sq as Square });
-        } else {
-          // New piece (e.g. pawn promotion or board reset)
-          const newId = Math.random().toString(36).substring(7);
-          usedIds.add(newId);
-          next.push({ id: newId, type, color, square: sq as Square });
+          newP.id = existing.id;
         }
       });
-      return next;
+
+      // Pass 2: Pieces that moved
+      newPieces.forEach((newP) => {
+        if (!newP.id) {
+          const existing = prev.find(
+            (p) => p.type === newP.type && p.color === newP.color && !usedIds.has(p.id),
+          );
+          if (existing) {
+            usedIds.add(existing.id);
+            newP.id = existing.id;
+          } else {
+            // New piece (e.g., pawn promotion or board reset)
+            const newId = Math.random().toString(36).substring(7);
+            usedIds.add(newId);
+            newP.id = newId;
+          }
+        }
+      });
+
+      return newPieces;
     });
   }, [fen]);
 
