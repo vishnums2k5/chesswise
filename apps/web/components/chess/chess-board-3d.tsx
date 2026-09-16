@@ -98,7 +98,7 @@ function Piece({ data, orientation, onClick, isSelected }: any) {
   );
 }
 
-function BoardSquares({ orientation, selected, legalTargets, onSquareClick }: any) {
+function BoardSquares({ orientation, selected, legalTargets, onSquareClick, pieces }: any) {
   const squares = [];
   for (let rank = 0; rank < 8; rank++) {
     for (let file = 0; file < 8; file++) {
@@ -108,25 +108,37 @@ function BoardSquares({ orientation, selected, legalTargets, onSquareClick }: an
 
       const isSelected = selected === sq;
       const isLegal = legalTargets.includes(sq);
+      const isCapture = isLegal && pieces.some((p: any) => p.square === sq);
 
       let color = isBlack ? '#739552' : '#EBECD0';
       if (isSelected) color = '#f5f682';
-      else if (isLegal) color = '#d35400';
 
       squares.push(
-        <mesh
-          key={sq}
-          position={[x, 0.01, z]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSquareClick(sq);
-          }}
-          receiveShadow
-        >
-          <planeGeometry args={[SQUARE_SIZE, SQUARE_SIZE]} />
-          <meshStandardMaterial color={color} />
-        </mesh>,
+        <group key={sq} position={[x, 0.01, z]}>
+          <mesh
+            rotation={[-Math.PI / 2, 0, 0]}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSquareClick(sq);
+            }}
+            receiveShadow
+          >
+            <planeGeometry args={[SQUARE_SIZE, SQUARE_SIZE]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+          {isLegal && !isCapture && (
+            <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[0.15, 32]} />
+              <meshBasicMaterial color="#000" opacity={0.25} transparent />
+            </mesh>
+          )}
+          {isLegal && isCapture && (
+            <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.35, 0.45, 32]} />
+              <meshBasicMaterial color="#000" opacity={0.25} transparent />
+            </mesh>
+          )}
+        </group>,
       );
     }
   }
@@ -223,6 +235,7 @@ export default function ChessBoard3D({
           orientation={orientation}
           selected={selected}
           legalTargets={legalTargets}
+          pieces={pieces}
           onSquareClick={handleSquareClick}
         />
 
