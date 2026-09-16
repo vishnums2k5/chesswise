@@ -4,6 +4,7 @@ import { Canvas } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import { useSpring, a } from '@react-spring/three';
 import { Square, Chess, fenToPieceMap, getLegalMovesForSquare } from '@chesswise/chess-core';
+import { Text } from '@react-three/drei';
 
 const SQUARE_SIZE = 1;
 const BOARD_OFFSET = (8 * SQUARE_SIZE) / 2 - SQUARE_SIZE / 2;
@@ -213,7 +214,7 @@ export default function ChessBoard3D({
 
   return (
     <div className="h-full min-h-[600px] w-full overflow-hidden rounded-lg bg-[#222] ring-4 ring-[#333]">
-      <Canvas shadows camera={{ position: [0, 6, 8], fov: 45 }}>
+      <Canvas shadows camera={{ position: [0, 4.5, 5.5], fov: 60 }}>
         <ambientLight intensity={0.5} />
         <spotLight position={[10, 10, 10]} angle={0.2} penumbra={1} intensity={1} castShadow />
         <pointLight position={[-10, -10, -10]} intensity={0.5} />
@@ -239,9 +240,60 @@ export default function ChessBoard3D({
 
         {/* Board Base / Frame */}
         <mesh position={[0, -0.3, 0]} receiveShadow>
-          <boxGeometry args={[8 * SQUARE_SIZE + 0.5, 0.5, 8 * SQUARE_SIZE + 0.5]} />
+          <boxGeometry args={[8 * SQUARE_SIZE + 0.8, 0.5, 8 * SQUARE_SIZE + 0.8]} />
           <meshStandardMaterial color="#333" />
         </mesh>
+
+        {/* Coordinates */}
+        <group position={[0, -0.04, 0]}>
+          {Array.from({ length: 8 }).map((_, i) => {
+            const isWhite = orientation === 'white';
+            const fileStr = String.fromCharCode(97 + (isWhite ? i : 7 - i));
+            const rankStr = isWhite ? (8 - i).toString() : (i + 1).toString();
+            const pos = i * SQUARE_SIZE - BOARD_OFFSET;
+
+            return (
+              <group key={i}>
+                {/* Files (a-h) - Bottom edge */}
+                <Text
+                  position={[pos, -0.04, BOARD_OFFSET + 0.65]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  fontSize={0.25}
+                  color="#aaa"
+                >
+                  {fileStr}
+                </Text>
+                {/* Files (a-h) - Top edge */}
+                <Text
+                  position={[pos, -0.04, -(BOARD_OFFSET + 0.65)]}
+                  rotation={[-Math.PI / 2, 0, Math.PI]}
+                  fontSize={0.25}
+                  color="#aaa"
+                >
+                  {fileStr}
+                </Text>
+                {/* Ranks (1-8) - Left edge */}
+                <Text
+                  position={[-(BOARD_OFFSET + 0.65), -0.04, pos]}
+                  rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+                  fontSize={0.25}
+                  color="#aaa"
+                >
+                  {rankStr}
+                </Text>
+                {/* Ranks (1-8) - Right edge */}
+                <Text
+                  position={[BOARD_OFFSET + 0.65, -0.04, pos]}
+                  rotation={[-Math.PI / 2, 0, -Math.PI / 2]}
+                  fontSize={0.25}
+                  color="#aaa"
+                >
+                  {rankStr}
+                </Text>
+              </group>
+            );
+          })}
+        </group>
 
         <ContactShadows position={[0, -0.04, 0]} opacity={0.4} scale={10} blur={2} far={4} />
         <OrbitControls
