@@ -184,29 +184,32 @@ export default function PlayPage() {
   };
 
   // Whisper Coach: request a hint
-  const handleHint = async () => {
+  const handleHint = () => {
     const nextLevel = Math.min(3, hintLevel + 1) as 1 | 2 | 3;
-
-    // Spend 5 XP per hint request
-    try {
-      const res = await fetch('/api/xp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: 5, reason: 'whisper_hint' }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setXp(data.xp);
-      }
-    } catch {
-      /* continue even if XP deduction fails */
-    }
-
     setHintLevel(nextLevel);
-    if (!engine.bestMove) {
+
+    if (nextLevel === 1) {
       setHintText('Analyzing...');
       engine.analyzePosition(chess.fen);
+    } else if (engine.bestMove) {
+      setHintText(getHint(engine.bestMove, nextLevel));
     }
+
+    // Spend 5 XP per hint request in the background
+    fetch('/api/xp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: 5, reason: 'whisper_hint' }),
+    })
+      .then((res) => {
+        if (res.ok) return res.json();
+      })
+      .then((data) => {
+        if (data?.xp !== undefined) setXp(data.xp);
+      })
+      .catch(() => {
+        /* ignore */
+      });
   };
 
   // Update hint text reactively when the engine finds the best move
