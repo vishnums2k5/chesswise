@@ -202,15 +202,19 @@ export default function PlayPage() {
       /* continue even if XP deduction fails */
     }
 
-    // Run engine analysis on current position for the player
-    engine.analyzePosition(chess.fen);
-    // Give engine a moment then show hint
-    setTimeout(() => {
-      const hint = getHint(engine.bestMove, nextLevel);
-      setHintText(hint);
-      setHintLevel(nextLevel);
-    }, 800);
+    setHintLevel(nextLevel);
+    if (!engine.bestMove) {
+      setHintText('Analyzing...');
+      engine.analyzePosition(chess.fen);
+    }
   };
+
+  // Update hint text reactively when the engine finds the best move
+  useEffect(() => {
+    if (hintLevel > 0 && engine.bestMove) {
+      setHintText(getHint(engine.bestMove, hintLevel as 1 | 2 | 3));
+    }
+  }, [hintLevel, engine.bestMove]);
 
   const lastMove =
     chess.history.length > 0
