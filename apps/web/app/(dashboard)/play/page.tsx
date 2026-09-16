@@ -225,7 +225,9 @@ export default function PlayPage() {
   return (
     <div className="flex h-full flex-col gap-6 lg:flex-row">
       {/* Board area */}
-      <div className="flex flex-1 items-start justify-center pt-2">
+      <div
+        className={`flex flex-1 justify-center pt-2 ${is3DMode ? 'items-stretch' : 'items-start'}`}
+      >
         {is3DMode ? (
           <ChessBoard3D
             fen={chess.fen}

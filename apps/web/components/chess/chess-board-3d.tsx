@@ -245,7 +245,7 @@ export default function ChessBoard3D({
         </mesh>
 
         {/* Coordinates */}
-        <group position={[0, -0.04, 0]}>
+        <group position={[0, 0, 0]}>
           {Array.from({ length: 8 }).map((_, i) => {
             const isWhite = orientation === 'white';
             const fileStr = String.fromCharCode(97 + (isWhite ? i : 7 - i));
@@ -256,37 +256,37 @@ export default function ChessBoard3D({
               <group key={i}>
                 {/* Files (a-h) - Bottom edge */}
                 <Text
-                  position={[pos, -0.04, BOARD_OFFSET + 0.65]}
+                  position={[pos, 0.01, BOARD_OFFSET + 0.65]}
                   rotation={[-Math.PI / 2, 0, 0]}
                   fontSize={0.25}
-                  color="#aaa"
+                  color="#e5e5e5"
                 >
                   {fileStr}
                 </Text>
                 {/* Files (a-h) - Top edge */}
                 <Text
-                  position={[pos, -0.04, -(BOARD_OFFSET + 0.65)]}
+                  position={[pos, 0.01, -(BOARD_OFFSET + 0.65)]}
                   rotation={[-Math.PI / 2, 0, Math.PI]}
                   fontSize={0.25}
-                  color="#aaa"
+                  color="#e5e5e5"
                 >
                   {fileStr}
                 </Text>
                 {/* Ranks (1-8) - Left edge */}
                 <Text
-                  position={[-(BOARD_OFFSET + 0.65), -0.04, pos]}
+                  position={[-(BOARD_OFFSET + 0.65), 0.01, pos]}
                   rotation={[-Math.PI / 2, 0, Math.PI / 2]}
                   fontSize={0.25}
-                  color="#aaa"
+                  color="#e5e5e5"
                 >
                   {rankStr}
                 </Text>
                 {/* Ranks (1-8) - Right edge */}
                 <Text
-                  position={[BOARD_OFFSET + 0.65, -0.04, pos]}
+                  position={[BOARD_OFFSET + 0.65, 0.01, pos]}
                   rotation={[-Math.PI / 2, 0, -Math.PI / 2]}
                   fontSize={0.25}
-                  color="#aaa"
+                  color="#e5e5e5"
                 >
                   {rankStr}
                 </Text>

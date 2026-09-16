@@ -52,16 +52,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Sidebar navItems={finalNavItems} displayName={displayName} email={email} />
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex flex-1 flex-col overflow-y-auto">
         {/* Mobile header */}
-        <header className="flex items-center justify-between border-b border-border px-4 py-3 md:hidden">
+        <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 md:hidden">
           <span className="font-serif text-lg font-bold text-foreground">Chesswise</span>
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
             {displayName.charAt(0).toUpperCase()}
           </div>
         </header>
 
-        <div className="p-6">{children}</div>
+        <div className="flex-1 p-6">{children}</div>
       </main>
 
       {/* Mobile bottom tab bar */}
