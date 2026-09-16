@@ -63,7 +63,7 @@ export default function PlayPage() {
   const [xp, setXp] = useState<number | null>(null);
   const [is3DMode, setIs3DMode] = useState(false);
 
-  const chess = useChess();
+  const chess = useChess(undefined, 'chesswise_play_state');
   const engine = useEngine({ skillLevel: difficulty.skillLevel, depth: difficulty.depth });
 
   // Load profile for Mirror Bot

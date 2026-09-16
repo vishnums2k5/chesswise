@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Chess, Square, Move, PieceSymbol } from '@chesswise/chess-core';
 
 export interface UseChessReturn {
@@ -22,9 +22,35 @@ export interface UseChessReturn {
   historyIndex: number;
 }
 
-export function useChess(startFen?: string): UseChessReturn {
+export function useChess(startFen?: string, storageKey?: string): UseChessReturn {
   const [game, setGame] = useState<Chess>(() => (startFen ? new Chess(startFen) : new Chess()));
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load from localStorage on mount if storageKey is provided
+  useEffect(() => {
+    if (storageKey && typeof window !== 'undefined') {
+      const savedPgn = localStorage.getItem(storageKey);
+      if (savedPgn) {
+        try {
+          const fresh = new Chess();
+          fresh.loadPgn(savedPgn);
+          setGame(fresh);
+          setHistoryIndex(fresh.history().length - 1);
+        } catch {
+          console.error('Failed to parse saved chess game');
+        }
+      }
+    }
+    setIsLoaded(true);
+  }, [storageKey]);
+
+  // Save to localStorage on every move
+  useEffect(() => {
+    if (isLoaded && storageKey && typeof window !== 'undefined') {
+      localStorage.setItem(storageKey, game.pgn());
+    }
+  }, [game.pgn(), isLoaded, storageKey]);
 
   const update = useCallback((fn: (g: Chess) => void) => {
     setGame((prev) => {
