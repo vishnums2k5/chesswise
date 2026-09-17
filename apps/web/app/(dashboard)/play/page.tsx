@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Square } from '@chesswise/chess-core';
 import { useChess } from '@/hooks/use-chess';
 import { useEngine } from '@/hooks/use-engine';
@@ -62,6 +63,8 @@ export default function PlayPage() {
   const [hintText, setHintText] = useState<string>('');
   const [xp, setXp] = useState<number | null>(null);
   const [is3DMode, setIs3DMode] = useState(false);
+  const [analyzingGame, setAnalyzingGame] = useState(false);
+  const router = useRouter();
 
   const chess = useChess(undefined, 'chesswise_play_state');
   const engine = useEngine({ skillLevel: difficulty.skillLevel, depth: difficulty.depth });
@@ -101,24 +104,29 @@ export default function PlayPage() {
       })()
     : null;
 
-  // Update game status
+  // Handle Game Over status updates
   useEffect(() => {
-    if (chess.isCheckmate) {
-      const winner = chess.turn === 'w' ? 'Black' : 'White';
-      setGameStatus(`Checkmate! ${winner} wins.`);
-    } else if (chess.isStalemate) {
-      setGameStatus("Stalemate! It's a draw.");
-    } else if (chess.isDraw) {
-      setGameStatus('Draw!');
-    } else if (chess.isCheck) {
-      setGameStatus('Check!');
-    } else {
+    if (!chess.isGameOver) {
       setGameStatus('');
+      return;
     }
-    // Reset hints on each move
+    if (chess.isCheckmate) setGameStatus(chess.turn === 'w' ? 'Black wins!' : 'White wins!');
+    else if (chess.isStalemate) setGameStatus('Draw (Stalemate)');
+    else if (chess.isDraw) setGameStatus('Draw (Insufficient material / Repetition)');
+
+    // Stop engine and whisper coach when game ends
+    engine.stopAnalysis();
     setHintLevel(0);
     setHintText('');
-  }, [chess.isCheckmate, chess.isStalemate, chess.isDraw, chess.isCheck, chess.turn]);
+  }, [
+    chess.isCheckmate,
+    chess.isStalemate,
+    chess.isDraw,
+    chess.isCheck,
+    chess.turn,
+    chess.isGameOver,
+    engine,
+  ]);
 
   useEffect(() => {
     if (!chess.isGameOver && chess.turn === engineColor && engine.isReady) {
@@ -152,7 +160,7 @@ export default function PlayPage() {
       if (chess.turn === engineColor) return;
       chess.makeMove(from, to, promotion as 'q' | 'r' | 'b' | 'n' | undefined);
     },
-    [chess, engineColor],
+    [chess, engineColor, chess.makeMove],
   );
 
   const handleNewGame = () => {
@@ -166,6 +174,29 @@ export default function PlayPage() {
   const handleFlipBoard = () => {
     setOrientation((o) => (o === 'white' ? 'black' : 'white'));
     setEngineColor((c) => (c === 'w' ? 'b' : 'w'));
+  };
+
+  const handleAnalyzeGame = async () => {
+    setAnalyzingGame(true);
+    try {
+      const pgn = chess.game.pgn();
+      const res = await fetch('/api/games/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pgn }),
+      });
+      const data = await res.json();
+      if (data.gameId) {
+        router.push(`/report/${data.gameId}`);
+      } else {
+        alert('Failed to analyze game.');
+        setAnalyzingGame(false);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to analyze game.');
+      setAnalyzingGame(false);
+    }
   };
 
   const handleDifficultyChange = (d: DifficultyLevel) => {
