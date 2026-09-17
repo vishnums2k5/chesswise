@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Chess, Square, Move, PieceSymbol } from '@chesswise/chess-core';
+import { useChessSound } from './use-chess-sound';
 
 export interface UseChessReturn {
   game: Chess;
@@ -26,6 +27,7 @@ export function useChess(startFen?: string, storageKey?: string): UseChessReturn
   const [game, setGame] = useState<Chess>(() => (startFen ? new Chess(startFen) : new Chess()));
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [isLoaded, setIsLoaded] = useState(false);
+  const playSound = useChessSound();
 
   // Load from localStorage on mount if storageKey is provided
   useEffect(() => {
@@ -67,24 +69,39 @@ export function useChess(startFen?: string, storageKey?: string): UseChessReturn
     });
   }, []);
 
-  const makeMove = useCallback((from: Square, to: Square, promotion?: PieceSymbol): Move | null => {
-    let result: Move | null = null;
-    setGame((prev) => {
-      const history = prev.history({ verbose: true }) as Move[];
-      const next = new Chess();
-      for (const m of history) {
-        next.move(m);
-      }
-      try {
-        result = next.move({ from, to, promotion: promotion ?? 'q' });
-        setHistoryIndex(next.history().length - 1);
-        return result ? next : prev;
-      } catch {
-        return prev;
-      }
-    });
-    return result;
-  }, []);
+  const makeMove = useCallback(
+    (from: Square, to: Square, promotion?: PieceSymbol): Move | null => {
+      let result: Move | null = null;
+      setGame((prev) => {
+        const history = prev.history({ verbose: true }) as Move[];
+        const next = new Chess();
+        for (const m of history) {
+          next.move(m);
+        }
+        try {
+          result = next.move({ from, to, promotion: promotion ?? 'q' });
+
+          if (result) {
+            // Play appropriate sound
+            if (next.isGameOver()) {
+              playSound('end');
+            } else if (result.captured) {
+              playSound('capture');
+            } else {
+              playSound('move');
+            }
+          }
+
+          setHistoryIndex(next.history().length - 1);
+          return result ? next : prev;
+        } catch {
+          return prev;
+        }
+      });
+      return result;
+    },
+    [playSound],
+  );
 
   const undoMove = useCallback(() => {
     setGame((prev) => {
