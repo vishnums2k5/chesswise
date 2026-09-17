@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Menu } from 'lucide-react';
 import { LogoutButton } from '@/app/(dashboard)/logout-button';
 
@@ -20,6 +21,7 @@ interface SidebarProps {
 
 export function Sidebar({ navItems, displayName, email }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
 
   // Optional: load initial state from localStorage
   useEffect(() => {
@@ -57,29 +59,34 @@ export function Sidebar({ navItems, displayName, email }: SidebarProps) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-        {navItems.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            className={`flex items-center rounded-md py-2 transition-colors ${
-              collapsed ? 'justify-center px-0' : 'gap-3 px-3'
-            } ${
-              item.disabled
-                ? 'cursor-not-allowed text-muted-foreground/50'
-                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-            }`}
-            aria-disabled={item.disabled}
-            title={collapsed ? item.label : undefined}
-          >
-            <span className="text-xl">{item.icon}</span>
-            {!collapsed && <span>{item.label}</span>}
-            {!collapsed && item.disabled && (
-              <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                Soon
-              </span>
-            )}
-          </Link>
-        ))}
+        {navItems.map((item) => {
+          const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+          return (
+            <Link
+              key={item.label}
+              href={item.href}
+              className={`flex items-center rounded-md py-2 transition-colors ${
+                collapsed ? 'justify-center px-0' : 'gap-3 px-3'
+              } ${
+                item.disabled
+                  ? 'cursor-not-allowed text-muted-foreground/50'
+                  : isActive
+                    ? 'bg-accent/80 font-medium text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+              }`}
+              aria-disabled={item.disabled}
+              title={collapsed ? item.label : undefined}
+            >
+              <span className="text-xl">{item.icon}</span>
+              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && item.disabled && (
+                <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  Soon
+                </span>
+              )}
+            </Link>
+          );
+        })}
       </nav>
 
       <div
