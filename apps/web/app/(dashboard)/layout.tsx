@@ -34,8 +34,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
       where: { supabaseId: user.id },
       select: { role: true },
     });
+
+    if (!dbUser) {
+      dbUser = await prisma.user.create({
+        data: {
+          supabaseId: user.id,
+          email: user.email ?? 'unknown@example.com',
+          displayName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Player',
+        },
+        select: { role: true },
+      });
+    }
   } catch (error) {
-    console.error('Failed to fetch user from Prisma:', error);
+    console.error('Failed to fetch/create user from Prisma:', error);
   }
 
   const isCoach = dbUser?.role === 'COACH';
