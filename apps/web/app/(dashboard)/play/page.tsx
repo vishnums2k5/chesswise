@@ -104,10 +104,13 @@ export default function PlayPage() {
       })()
     : null;
 
+  const [savedGameId, setSavedGameId] = useState<string | null>(null);
+
   // Handle Game Over status updates
   useEffect(() => {
     if (!chess.isGameOver) {
       setGameStatus('');
+      setSavedGameId(null);
       return;
     }
     if (chess.isCheckmate) setGameStatus(chess.turn === 'w' ? 'Black wins!' : 'White wins!');
@@ -118,6 +121,21 @@ export default function PlayPage() {
     engine.stopAnalysis();
     setHintLevel(0);
     setHintText('');
+
+    // Auto-save the game in the background
+    const pgn = chess.game.pgn();
+    fetch('/api/games/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pgn }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.gameId) {
+          setSavedGameId(data.gameId);
+        }
+      })
+      .catch((err) => console.error('Failed to auto-save game:', err));
   }, [
     chess.isCheckmate,
     chess.isStalemate,
@@ -126,6 +144,7 @@ export default function PlayPage() {
     chess.turn,
     chess.isGameOver,
     engine,
+    chess.game,
   ]);
 
   useEffect(() => {
@@ -177,6 +196,10 @@ export default function PlayPage() {
   };
 
   const handleAnalyzeGame = async () => {
+    if (savedGameId) {
+      router.push(`/report/${savedGameId}`);
+      return;
+    }
     setAnalyzingGame(true);
     try {
       const pgn = chess.game.pgn();
@@ -299,6 +322,28 @@ export default function PlayPage() {
           >
             {gameStatus}
           </div>
+        )}
+
+        {/* Analyze Game Button (Only visible when game has started) */}
+        {chess.history.length > 0 && (
+          <button
+            onClick={handleAnalyzeGame}
+            disabled={analyzingGame}
+            className={cn(
+              'w-full rounded-md px-3 py-3 text-sm font-bold shadow-sm transition-colors',
+              chess.isGameOver
+                ? 'animate-pulse bg-[#C9A24B] text-[#141A22] hover:bg-[#C9A24B]/90'
+                : 'border border-border bg-muted/20 text-muted-foreground hover:bg-muted/40',
+            )}
+          >
+            {analyzingGame
+              ? 'Uploading Game...'
+              : chess.isGameOver
+                ? savedGameId
+                  ? '📊 View Game Report & Puzzles'
+                  : '🔍 Analyze Game to generate puzzles'
+                : '🔍 Analyze Game'}
+          </button>
         )}
 
         {/* Engine Status */}

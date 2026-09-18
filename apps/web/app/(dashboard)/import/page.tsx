@@ -170,10 +170,17 @@ export default function ImportPage() {
   };
 
   const loadMyGames = async () => {
-    const res = await fetch('/api/games');
-    if (res.ok) {
-      const data = await res.json();
-      setGames(data.games ?? []);
+    try {
+      const res = await fetch('/api/games');
+      if (res.ok) {
+        const data = await res.json();
+        setGames(data.games ?? []);
+      } else {
+        console.error('Failed to load games:', res.status, res.statusText);
+      }
+    } catch (err) {
+      console.error('Error fetching games:', err);
+    } finally {
       setGamesLoaded(true);
     }
   };
