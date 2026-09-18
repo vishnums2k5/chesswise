@@ -24,11 +24,14 @@ export async function POST(req: NextRequest) {
   const chess = new Chess();
   try {
     chess.loadPgn(pgn.trim());
-  } catch {
+  } catch (err) {
+    console.error('[import] Invalid PGN format error:', err);
+    console.error('[import] Failing PGN string:', pgn.trim());
     return NextResponse.json({ error: 'Invalid PGN format' }, { status: 400 });
   }
 
   if (chess.history().length === 0) {
+    console.error('[import] PGN has no moves. PGN string:', pgn.trim());
     return NextResponse.json({ error: 'PGN has no moves' }, { status: 400 });
   }
 

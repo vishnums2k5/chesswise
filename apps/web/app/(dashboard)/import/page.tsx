@@ -139,7 +139,14 @@ export default function ImportPage() {
         if (!latestArchive) throw new Error('No games found');
         const gamesRes = await fetch(`${latestArchive}/pgn`);
         const pgnsText = await gamesRes.text();
-        gamesData = pgnsText.split('\n\n\n').filter(Boolean).slice(0, fetchLimit);
+        // Chess.com separates games with varying newlines, robustly split by '[Event '
+        // The archive is chronological (oldest first), so we MUST reverse it to get the most recent games
+        gamesData = pgnsText
+          .split('[Event "')
+          .filter(Boolean)
+          .map((s) => '[Event "' + s.trim())
+          .reverse()
+          .slice(0, fetchLimit);
       }
 
       if (gamesData.length === 0) throw new Error('No games found for this user');
