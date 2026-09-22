@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
     dbUser = await prisma.user.create({
       data: {
         supabaseId: user.id,
-        email: user.email!,
-        displayName: user.user_metadata?.display_name ?? user.email?.split('@')[0],
+        email: user.email ?? 'unknown@example.com',
+        displayName: user.user_metadata?.display_name ?? user.email?.split('@')[0] ?? 'Player',
       },
     });
   }
@@ -66,9 +66,17 @@ export async function POST(req: NextRequest) {
   });
 
   // Enqueue analysis job (non-blocking — if Redis is unavailable, game stays QUEUED)
+  let queue: Queue | null = null;
   try {
-    const queue = new Queue('game-analysis', { connection: { url: REDIS_URL } });
-    await queue.add(
+    queue = new Queue('game-analysis', {
+      connection: {
+        url: REDIS_URL,
+        maxRetriesPerRequest: null,
+      },
+    });
+
+    // Use Promise.race to prevent indefinite hanging if Redis is unreachable
+    const addJobPromise = queue.add(
       'analyze',
       { gameId: game.id },
       {
@@ -76,10 +84,19 @@ export async function POST(req: NextRequest) {
         backoff: { type: 'exponential', delay: 5000 },
       },
     );
-    await queue.close();
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Redis connection timeout')), 2000),
+    );
+
+    await Promise.race([addJobPromise, timeoutPromise]);
   } catch (err) {
     console.warn('[import] Redis not available — job not queued:', err);
     // Game stays in QUEUED state; worker can pick it up when Redis is available
+  } finally {
+    if (queue) {
+      queue.close().catch(() => {});
+    }
   }
 
   return NextResponse.json({ gameId: game.id, status: 'QUEUED' }, { status: 201 });
