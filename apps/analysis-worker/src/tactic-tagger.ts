@@ -61,14 +61,26 @@ function getAttackedEnemyPieces(game: Chess, square: string, ourColor: 'w' | 'b'
   const board = game.board();
   const attacked: string[] = [];
 
-  // Get all enemy pieces
+  // Create an evaluation position where ourColor is the active turn
+  const fenParts = game.fen().split(' ');
+  fenParts[1] = ourColor;
+  let attackGame: Chess;
+  try {
+    attackGame = new Chess(fenParts.join(' '));
+  } catch {
+    attackGame = game;
+  }
+
+  // Get all attack destinations from our piece on 'square'
+  const attacks = attackGame.moves({ square: square as any, verbose: true });
+  const targetSquares = new Set(attacks.map((m: any) => m.to));
+
+  // Identify attacked enemy pieces
   board.forEach((row, rankIdx) => {
     row.forEach((piece, fileIdx) => {
       if (piece && piece.color === enemyColor) {
         const sq = `${String.fromCharCode(97 + fileIdx)}${8 - rankIdx}`;
-        // Check if our piece on 'square' attacks this enemy piece
-        const attacks = game.moves({ square: square as any, verbose: true });
-        if (attacks.some((m: any) => m.to === sq)) {
+        if (targetSquares.has(sq)) {
           attacked.push(sq);
         }
       }

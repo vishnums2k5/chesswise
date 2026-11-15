@@ -2,44 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import { awardXp, XP_REWARDS } from '@/lib/xp';
-
-/**
- * SM-2 algorithm:
- * - Correct (quality >= 3): EF' = EF + 0.1 - (5 - q) * (0.08 + (5 - q) * 0.02), interval grows
- * - Incorrect: reset interval to 1
- */
-function sm2Update(correct: boolean, interval: number, easeFactor: number, solvedCount: number) {
-  if (!correct) {
-    return {
-      interval: 1,
-      easeFactor: Math.max(1.3, easeFactor - 0.2),
-      nextReviewAt: addDays(new Date(), 1),
-      solvedCount,
-    };
-  }
-
-  // q = 4 for correct (simplified — could expose a 0-5 rating later)
-  const q = 4;
-  const newEF = Math.max(1.3, easeFactor + 0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
-
-  let newInterval: number;
-  if (solvedCount === 0) newInterval = 1;
-  else if (solvedCount === 1) newInterval = 6;
-  else newInterval = Math.round(interval * newEF);
-
-  return {
-    interval: newInterval,
-    easeFactor: newEF,
-    nextReviewAt: addDays(new Date(), newInterval),
-    solvedCount: solvedCount + 1,
-  };
-}
-
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
+import { sm2Update } from '@/lib/sm2';
 
 export async function POST(
   req: NextRequest,
