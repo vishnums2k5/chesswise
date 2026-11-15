@@ -137,7 +137,7 @@ export default function ChatPanel({
           }
         }
       }
-    } catch (_err) {
+    } catch {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === placeholderId

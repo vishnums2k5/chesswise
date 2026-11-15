@@ -172,14 +172,14 @@ export default function PlayPage() {
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [engine.bestMove, chess.turn, chess.isGameOver, engineColor, chess.makeMove]);
+  }, [engine.bestMove, chess, engineColor]);
 
   const handlePlayerMove = useCallback(
     (from: Square, to: Square, promotion?: string) => {
       if (chess.turn === engineColor) return;
       chess.makeMove(from, to, promotion as 'q' | 'r' | 'b' | 'n' | undefined);
     },
-    [chess, engineColor, chess.makeMove],
+    [chess, engineColor],
   );
 
   const handleNewGame = () => {

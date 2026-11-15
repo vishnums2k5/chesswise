@@ -142,7 +142,7 @@ export default function BranchExplorer({ startFen, moveLabel, onClose }: BranchE
                 branch board.
               </p>
               <p>🤖 Engine evaluates every position as you explore.</p>
-              <p>💡 Try the move you actually played vs. the engine's suggestion.</p>
+              <p>💡 Try the move you actually played vs. the engine&apos;s suggestion.</p>
             </div>
 
             {/* Controls */}

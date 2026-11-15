@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
 
 interface SkillProfile {
   tactics: number;
@@ -66,7 +65,7 @@ export default function StudentsPage() {
       <div>
         <h1 className="font-serif text-2xl font-bold text-foreground">My Students</h1>
         <p className="text-sm text-muted-foreground">
-          Monitor your team's training progress and weaknesses.
+          Monitor your team&apos;s training progress and weaknesses.
         </p>
       </div>
 

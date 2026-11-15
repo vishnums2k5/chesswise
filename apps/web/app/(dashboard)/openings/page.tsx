@@ -47,7 +47,7 @@ export default function OpeningsPage() {
       <div>
         <h1 className="font-serif text-2xl font-bold text-foreground">Opening Repertoire</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Openings you've played in your imported games, up to depth 10.
+          Openings you&apos;ve played in your imported games, up to depth 10.
         </p>
       </div>
 
