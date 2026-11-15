@@ -44,16 +44,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Look up or create User row linked to Supabase user
-  let dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } });
-  if (!dbUser) {
-    dbUser = await prisma.user.create({
-      data: {
-        supabaseId: user.id,
-        email: user.email ?? 'unknown@example.com',
-        displayName: user.user_metadata?.display_name ?? user.email?.split('@')[0] ?? 'Player',
-      },
-    });
-  }
+  const dbUser = await prisma.user.upsert({
+    where: { supabaseId: user.id },
+    update: {},
+    create: {
+      supabaseId: user.id,
+      email: user.email ?? 'unknown@example.com',
+      displayName: user.user_metadata?.display_name ?? user.email?.split('@')[0] ?? 'Player',
+    },
+  });
 
   // Create the game record
   const game = await prisma.game.create({

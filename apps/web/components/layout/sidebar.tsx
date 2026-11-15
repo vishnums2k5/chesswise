@@ -244,7 +244,7 @@ export function Sidebar({ displayName, email, isPro = false, level = 1, role }: 
               className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 font-serif text-sm font-bold text-primary transition-colors hover:border-primary"
               title={displayName}
             >
-              {displayName.charAt(0).toUpperCase()}
+              {(displayName || 'Player').charAt(0).toUpperCase()}
               <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-500" />
             </Link>
 

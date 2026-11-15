@@ -30,36 +30,45 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  let dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    include: {
-      skillProfile: true,
-      games: {
-        orderBy: { importedAt: 'desc' },
-        take: 5,
-        include: {
-          moves: {
-            where: {
-              quality: { in: ['BLUNDER', 'MISTAKE', 'INACCURACY'] },
+  let dbUser = null;
+  try {
+    dbUser = await prisma.user.upsert({
+      where: { supabaseId: user.id },
+      update: {},
+      create: {
+        supabaseId: user.id,
+        email: user.email ?? 'unknown@example.com',
+        displayName:
+          user.user_metadata?.full_name ||
+          user.user_metadata?.display_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          'Player',
+      },
+      include: {
+        skillProfile: true,
+        games: {
+          orderBy: { importedAt: 'desc' },
+          take: 5,
+          include: {
+            moves: {
+              where: {
+                quality: { in: ['BLUNDER', 'MISTAKE', 'INACCURACY'] },
+              },
+              select: { quality: true },
             },
-            select: { quality: true },
           },
         },
-      },
-      puzzleCards: {
-        select: { id: true, nextReviewAt: true, solvedCount: true },
-      },
-    },
-  });
-
-  if (!dbUser) {
-    try {
-      dbUser = await prisma.user.create({
-        data: {
-          supabaseId: user.id,
-          email: user.email ?? 'unknown@example.com',
-          displayName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Player',
+        puzzleCards: {
+          select: { id: true, nextReviewAt: true, solvedCount: true },
         },
+      },
+    });
+  } catch (err) {
+    console.warn('[DashboardPage] Prisma user resolution warning:', err);
+    try {
+      dbUser = await prisma.user.findUnique({
+        where: { supabaseId: user.id },
         include: {
           skillProfile: true,
           games: {
@@ -78,13 +87,15 @@ export default async function DashboardPage() {
         },
       });
     } catch {
-      // Handled gracefully below
+      dbUser = null;
     }
   }
 
   const displayName =
     dbUser?.displayName ||
+    user.user_metadata?.full_name ||
     user.user_metadata?.display_name ||
+    user.user_metadata?.name ||
     user.email?.split('@')[0] ||
     'Player';
 
@@ -444,8 +455,10 @@ export default async function DashboardPage() {
                 const whitePlayer = headers.White || 'White';
                 const blackPlayer = headers.Black || 'Black';
                 const result = headers.Result || '*';
-                const blunderCount = game.moves.filter((m) => m.quality === 'BLUNDER').length;
-                const mistakeCount = game.moves.filter((m) => m.quality === 'MISTAKE').length;
+                const blunderCount =
+                  game.moves?.filter((m) => m.quality === 'BLUNDER')?.length ?? 0;
+                const mistakeCount =
+                  game.moves?.filter((m) => m.quality === 'MISTAKE')?.length ?? 0;
 
                 return (
                   <Link

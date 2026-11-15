@@ -223,7 +223,7 @@ export function Topbar({
           title={displayName}
           aria-label="View user profile"
         >
-          {displayName.charAt(0).toUpperCase()}
+          {(displayName || 'Player').charAt(0).toUpperCase()}
         </Link>
       </div>
     </header>

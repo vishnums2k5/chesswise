@@ -19,8 +19,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   let dbUser = null;
   try {
-    dbUser = await prisma.user.findUnique({
+    dbUser = await prisma.user.upsert({
       where: { supabaseId: user.id },
+      update: {},
+      create: {
+        supabaseId: user.id,
+        email: user.email ?? 'unknown@example.com',
+        displayName:
+          user.user_metadata?.full_name ||
+          user.user_metadata?.display_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          'Player',
+      },
       select: {
         role: true,
         xp: true,
@@ -29,14 +40,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         displayName: true,
       },
     });
-
-    if (!dbUser) {
-      dbUser = await prisma.user.create({
-        data: {
-          supabaseId: user.id,
-          email: user.email ?? 'unknown@example.com',
-          displayName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Player',
-        },
+  } catch (error) {
+    console.warn('[DashboardLayout] Prisma user resolution warning:', error);
+    try {
+      dbUser = await prisma.user.findUnique({
+        where: { supabaseId: user.id },
         select: {
           role: true,
           xp: true,
@@ -45,14 +53,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
           displayName: true,
         },
       });
+    } catch {
+      dbUser = null;
     }
-  } catch (error) {
-    console.error('Failed to fetch/create user from Prisma:', error);
   }
 
   const displayName =
     dbUser?.displayName ||
+    user.user_metadata?.full_name ||
     user.user_metadata?.display_name ||
+    user.user_metadata?.name ||
     user.email?.split('@')[0] ||
     'Player';
   const email = user.email || '';
