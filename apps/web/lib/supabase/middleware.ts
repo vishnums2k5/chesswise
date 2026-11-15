@@ -27,11 +27,20 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // IMPORTANT: use getUser() not getSession() — getUser() validates
-  // the JWT against Supabase Auth server, getSession() only decodes locally.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Safely get user with a timeout to prevent middleware invocation timeouts
+  // if Supabase Auth is paused, slow, or unreachable.
+  let user = null;
+  try {
+    const userPromise = supabase.auth.getUser();
+    const timeoutPromise = new Promise<{ data: { user: null } }>((_, reject) =>
+      setTimeout(() => reject(new Error('Auth request timeout')), 2500),
+    );
+    const result = await Promise.race([userPromise, timeoutPromise]);
+    user = result?.data?.user ?? null;
+  } catch (err) {
+    console.warn('[middleware] Supabase auth check failed or timed out:', err);
+    user = null;
+  }
 
   // Route protection
   const isAuthRoute =
