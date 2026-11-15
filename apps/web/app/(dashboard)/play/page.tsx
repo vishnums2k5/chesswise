@@ -10,21 +10,42 @@ import ChessBoard3D from '@/components/chess/chess-board-3d';
 import MoveList from '@/components/chess/move-list';
 import { cn } from '@/lib/utils';
 import { getMirrorBotConfig, type SkillProfile } from '@/lib/mirror-bot';
+import {
+  Bot,
+  RotateCcw,
+  ArrowUpDown,
+  Sparkles,
+  Zap,
+  BarChart3,
+  Box,
+  Layers,
+  Crown,
+  Lightbulb,
+  CheckCircle2,
+  AlertCircle,
+  HelpCircle,
+} from 'lucide-react';
 
 const STATIC_DIFFICULTY_LEVELS = [
-  { label: 'Beginner', elo: '~600', skillLevel: 0, depth: 5 },
-  { label: 'Casual', elo: '~900', skillLevel: 5, depth: 8 },
-  { label: 'Club', elo: '~1400', skillLevel: 10, depth: 12 },
-  { label: 'Advanced', elo: '~1800', skillLevel: 15, depth: 16 },
-  { label: 'Master', elo: '~2200+', skillLevel: 20, depth: 20 },
-  { label: '🪞 Mirror', elo: 'Your nemesis', skillLevel: 10, depth: 14 },
+  { label: 'Beginner', elo: '~600', skillLevel: 0, depth: 5, color: 'text-emerald-400' },
+  { label: 'Casual', elo: '~900', skillLevel: 5, depth: 8, color: 'text-blue-400' },
+  { label: 'Club', elo: '~1400', skillLevel: 10, depth: 12, color: 'text-amber-400' },
+  { label: 'Advanced', elo: '~1800', skillLevel: 15, depth: 16, color: 'text-purple-400' },
+  { label: 'Master', elo: '~2200+', skillLevel: 20, depth: 20, color: 'text-red-400' },
+  { label: 'Mirror Bot', elo: 'Your Nemesis', skillLevel: 10, depth: 14, color: 'text-primary' },
 ] as const;
 
-type DifficultyLevel = { label: string; elo: string; skillLevel: number; depth: number };
+type DifficultyLevel = {
+  label: string;
+  elo: string;
+  skillLevel: number;
+  depth: number;
+  color?: string;
+};
 
 // Whisper hint levels
 function getHint(bestMove: string | null, level: 1 | 2 | 3): string {
-  if (!bestMove) return 'Engine still thinking…';
+  if (!bestMove) return 'Engine calculating best candidate moves…';
   const from = bestMove.slice(0, 2);
   const to = bestMove.slice(2, 4);
   const files = 'abcdefgh';
@@ -34,16 +55,15 @@ function getHint(bestMove: string | null, level: 1 | 2 | 3): string {
   const rankDiff = Math.abs(parseInt(from[1]!) - parseInt(to[1]!));
 
   if (level === 1) {
-    if (fileDiff === 1 && rankDiff === 2) return 'A knight move looks strong here.';
-    if (fileDiff === 0) return 'Consider moving along that file.';
-    if (rankDiff === 0) return 'A horizontal move could improve your position.';
-    return 'Look for an active move that improves a piece.';
+    if (fileDiff === 1 && rankDiff === 2) return 'A knight maneuver creates active counterplay.';
+    if (fileDiff === 0) return 'Look along the open file for tactical infiltration.';
+    if (rankDiff === 0) return 'A rank transition improves your piece coordination.';
+    return 'Look for an active move that centralizes or coordinates your pieces.';
   }
   if (level === 2) {
-    return `The piece on ${from} has a better square available.`;
+    return `Look closely at the piece currently stationed on ${from}.`;
   }
-  // Level 3: reveal exact move
-  return `Best move: ${from}→${to}`;
+  return `Objective engine recommendation: ${from} → ${to}`;
 }
 
 export default function PlayPage() {
@@ -64,8 +84,9 @@ export default function PlayPage() {
   const [xp, setXp] = useState<number | null>(null);
   const [is3DMode, setIs3DMode] = useState(false);
   const [analyzingGame, setAnalyzingGame] = useState(false);
-  const router = useRouter();
+  const [savedGameId, setSavedGameId] = useState<string | null>(null);
 
+  const router = useRouter();
   const chess = useChess(undefined, 'chesswise_play_state');
   const engine = useEngine({ skillLevel: difficulty.skillLevel, depth: difficulty.depth });
 
@@ -77,6 +98,7 @@ export default function PlayPage() {
         if (d.profile) setMirrorProfile(d.profile);
       })
       .catch(() => null);
+
     // Load user XP for hint display
     fetch('/api/settings')
       .then((r) => r.json())
@@ -104,8 +126,6 @@ export default function PlayPage() {
       })()
     : null;
 
-  const [savedGameId, setSavedGameId] = useState<string | null>(null);
-
   // Handle Game Over status updates
   useEffect(() => {
     if (!chess.isGameOver) {
@@ -113,16 +133,19 @@ export default function PlayPage() {
       setSavedGameId(null);
       return;
     }
-    if (chess.isCheckmate) setGameStatus(chess.turn === 'w' ? 'Black wins!' : 'White wins!');
-    else if (chess.isStalemate) setGameStatus('Draw (Stalemate)');
-    else if (chess.isDraw) setGameStatus('Draw (Insufficient material / Repetition)');
+    if (chess.isCheckmate) {
+      setGameStatus(chess.turn === 'w' ? 'Black won by checkmate!' : 'White won by checkmate!');
+    } else if (chess.isStalemate) {
+      setGameStatus('Draw by stalemate');
+    } else if (chess.isDraw) {
+      setGameStatus('Draw (insufficient material / repetition)');
+    }
 
-    // Stop engine and whisper coach when game ends
     engine.stopAnalysis();
     setHintLevel(0);
     setHintText('');
 
-    // Auto-save the game in the background
+    // Auto-save the game in background
     const pgn = chess.game.pgn();
     fetch('/api/games/import', {
       method: 'POST',
@@ -147,19 +170,13 @@ export default function PlayPage() {
     chess.game,
   ]);
 
+  // Engine triggers on its turn
   useEffect(() => {
     if (!chess.isGameOver && chess.turn === engineColor && engine.isReady) {
       engine.analyzePosition(chess.fen);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    chess.fen,
-    chess.turn,
-    chess.isGameOver,
-    engineColor,
-    engine.isReady,
-    engine.analyzePosition,
-  ]);
+  }, [chess.fen, chess.turn, chess.isGameOver, engineColor, engine.isReady]);
 
   // Apply engine bestMove
   useEffect(() => {
@@ -169,7 +186,7 @@ export default function PlayPage() {
       const promotion = engine.bestMove[4] as 'q' | 'r' | 'b' | 'n' | undefined;
       const timer = setTimeout(() => {
         chess.makeMove(from, to, promotion);
-      }, 200);
+      }, 250);
       return () => clearTimeout(timer);
     }
   }, [engine.bestMove, chess, engineColor]);
@@ -223,7 +240,7 @@ export default function PlayPage() {
   };
 
   const handleDifficultyChange = (d: DifficultyLevel) => {
-    if (d.label === '🪞 Mirror' && mirrorProfile) {
+    if (d.label === 'Mirror Bot' && mirrorProfile) {
       const config = getMirrorBotConfig(mirrorProfile);
       setDifficulty({ ...d, skillLevel: config.skillLevel, depth: config.depth });
       engine.setSkillLevel(config.skillLevel);
@@ -243,7 +260,7 @@ export default function PlayPage() {
     setHintLevel(nextLevel);
 
     if (nextLevel === 1) {
-      setHintText('Analyzing...');
+      setHintText('Engine analyzing board dynamics...');
       engine.analyzePosition(chess.fen);
     } else if (engine.bestMove) {
       setHintText(getHint(engine.bestMove, nextLevel));
@@ -261,12 +278,9 @@ export default function PlayPage() {
       .then((data) => {
         if (data?.xp !== undefined) setXp(data.xp);
       })
-      .catch(() => {
-        /* ignore */
-      });
+      .catch(() => null);
   };
 
-  // Update hint text reactively when the engine finds the best move
   useEffect(() => {
     if (hintLevel > 0 && engine.bestMove) {
       setHintText(getHint(engine.bestMove, hintLevel as 1 | 2 | 3));
@@ -284,200 +298,317 @@ export default function PlayPage() {
   const isPlayerTurn = chess.turn !== engineColor && !chess.isGameOver;
 
   return (
-    <div className="flex h-full flex-col gap-6 lg:flex-row">
-      {/* Board area */}
-      <div
-        className={`flex flex-1 justify-center pt-2 ${is3DMode ? 'items-stretch' : 'items-start'}`}
-      >
-        {is3DMode ? (
-          <ChessBoard3D
-            fen={chess.fen}
-            orientation={orientation}
-            onMove={handlePlayerMove}
-            interactive={!chess.isGameOver && chess.turn !== engineColor}
-          />
-        ) : (
-          <ChessBoard
-            fen={chess.fen}
-            orientation={orientation}
-            lastMove={lastMove}
-            onMove={handlePlayerMove}
-            interactive={!chess.isGameOver && chess.turn !== engineColor}
-            checkedKingSquare={checkedKingSquare}
-          />
-        )}
+    <div className="flex flex-col gap-6 lg:flex-row">
+      {/* Chessboard & Studio Stage */}
+      <div className="flex flex-1 flex-col items-center justify-start gap-3">
+        {/* Opponent Player Card (Top) */}
+        <div className="flex w-full max-w-[min(90vw,560px)] items-center justify-between rounded-xl border border-border/60 bg-card/70 px-4 py-2.5 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
+              <Bot className="h-4 w-4" />
+              {engine.thinking && chess.turn === engineColor && (
+                <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground">{difficulty.label}</span>
+                <span className="py-0.2 rounded bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">
+                  {difficulty.elo}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {engine.thinking && chess.turn === engineColor
+                  ? 'Calculating candidate lines…'
+                  : chess.turn === engineColor
+                    ? 'Thinking…'
+                    : 'Awaiting your move'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                'h-3 w-3 rounded-full border',
+                engineColor === 'w' ? 'border-border bg-ivory' : 'border-border/80 bg-ink',
+              )}
+              title={engineColor === 'w' ? 'Playing White' : 'Playing Black'}
+            />
+          </div>
+        </div>
+
+        {/* Board Container */}
+        <div className="relative flex w-full max-w-[min(90vw,560px)] justify-center">
+          {is3DMode ? (
+            <ChessBoard3D
+              fen={chess.fen}
+              orientation={orientation}
+              onMove={handlePlayerMove}
+              interactive={!chess.isGameOver && chess.turn !== engineColor}
+            />
+          ) : (
+            <ChessBoard
+              fen={chess.fen}
+              orientation={orientation}
+              lastMove={lastMove}
+              onMove={handlePlayerMove}
+              interactive={!chess.isGameOver && chess.turn !== engineColor}
+              checkedKingSquare={checkedKingSquare}
+            />
+          )}
+        </div>
+
+        {/* Player Card (Bottom) */}
+        <div className="flex w-full max-w-[min(90vw,560px)] items-center justify-between rounded-xl border border-border/60 bg-card/70 px-4 py-2.5 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/40 bg-card font-serif text-xs font-bold text-primary">
+              YOU
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground">You ({orientation})</span>
+                {isPlayerTurn && (
+                  <span className="py-0.2 rounded-full bg-emerald-500/15 px-2 text-[10px] font-semibold text-emerald-400">
+                    Your Turn
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Move {chess.history.length > 0 ? Math.ceil(chess.history.length / 2) : 1}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                'h-3 w-3 rounded-full border',
+                orientation === 'white' ? 'border-border bg-ivory' : 'border-border/80 bg-ink',
+              )}
+              title={orientation === 'white' ? 'Playing White' : 'Playing Black'}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Side panel */}
-      <div className="flex w-full flex-col gap-4 lg:w-72">
-        {/* Status */}
+      {/* Side Studio Control Deck */}
+      <div className="flex w-full flex-col gap-4 lg:w-80">
+        {/* Game Result Banner */}
         {gameStatus && (
           <div
             className={cn(
-              'rounded-lg border px-4 py-3 text-center text-sm font-semibold',
+              'rounded-xl border p-4 text-center shadow-lg transition-all',
               chess.isCheckmate
-                ? 'border-[#9B3B3B] bg-[#9B3B3B]/10 text-[#9B3B3B]'
-                : 'border-[#C9A24B] bg-[#C9A24B]/10 text-[#C9A24B]',
+                ? 'border-blunder/40 bg-blunder/15 text-foreground'
+                : 'border-primary/40 bg-primary/15 text-foreground',
             )}
           >
-            {gameStatus}
+            <div className="flex items-center justify-center gap-2">
+              {chess.isCheckmate ? (
+                <AlertCircle className="h-5 w-5 text-blunder" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+              )}
+              <h3 className="font-serif text-base font-bold">{gameStatus}</h3>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Game recorded. Generate an AI coaching report or review key tactics.
+            </p>
           </div>
         )}
 
-        {/* Analyze Game Button (Only visible when game has started) */}
+        {/* Deep Analysis CTA */}
         {chess.history.length > 0 && (
           <button
             onClick={handleAnalyzeGame}
             disabled={analyzingGame}
             className={cn(
-              'w-full rounded-md px-3 py-3 text-sm font-bold shadow-sm transition-colors',
+              'group flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold shadow-md transition-all duration-150',
               chess.isGameOver
-                ? 'animate-pulse bg-[#C9A24B] text-[#141A22] hover:bg-[#C9A24B]/90'
-                : 'border border-border bg-muted/20 text-muted-foreground hover:bg-muted/40',
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-[0_0_20px_rgba(201,162,75,0.35)]'
+                : 'border border-border/70 bg-card/80 text-foreground hover:bg-accent',
             )}
           >
-            {analyzingGame
-              ? 'Uploading Game...'
-              : chess.isGameOver
-                ? savedGameId
-                  ? '📊 View Game Report & Puzzles'
-                  : '🔍 Analyze Game to generate puzzles'
-                : '🔍 Analyze Game'}
+            <BarChart3 className="h-4 w-4 text-primary transition-transform group-hover:scale-110" />
+            <span>
+              {analyzingGame
+                ? 'Uploading to Cloud Engine…'
+                : chess.isGameOver
+                  ? savedGameId
+                    ? 'View Deep Game Report & Puzzles'
+                    : 'Generate Coaching Report'
+                  : 'Analyze Live Position'}
+            </span>
           </button>
         )}
 
-        {/* Engine Status */}
-        {!engine.isReady && (
-          <div className="flex flex-col gap-2 rounded border border-[#C9A24B]/30 bg-[#C9A24B]/10 px-3 py-2 text-xs text-[#C9A24B]">
-            <div className="animate-pulse text-center font-bold">Engine loading...</div>
-            <div className="max-h-32 overflow-y-auto text-[10px] opacity-70">
-              {engine.debugLogs.map((log, i) => (
-                <div key={i}>{log}</div>
+        {/* Socratic Whisper Coach Deck */}
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+              </div>
+              <h3 className="text-xs font-semibold text-foreground">Socratic Whisper Coach</h3>
+            </div>
+            {xp !== null && (
+              <span className="flex items-center gap-1 font-mono text-[11px] text-primary">
+                <Zap className="h-3 w-3" />
+                <span>{xp} XP</span>
+              </span>
+            )}
+          </div>
+
+          {/* Hint Progress Dots */}
+          <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2.5">
+            <span className="text-[11px] text-muted-foreground">Progression</span>
+            <div className="flex items-center gap-1.5">
+              {[1, 2, 3].map((lvl) => (
+                <span
+                  key={lvl}
+                  className={cn(
+                    'h-2 w-2 rounded-full transition-all',
+                    hintLevel >= lvl ? 'scale-110 bg-primary' : 'bg-muted',
+                  )}
+                />
               ))}
             </div>
           </div>
-        )}
-        {engine.isReady && engine.thinking && chess.turn === engineColor && (
-          <div className="animate-pulse text-center text-xs text-muted-foreground">
-            Engine thinking...
-          </div>
-        )}
 
-        {/* Whisper Coach Hint */}
-        {isPlayerTurn && (
-          <div className="space-y-2 rounded-lg border border-border bg-card p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-foreground">💡 Whisper Coach</span>
-              {xp !== null && <span className="text-[10px] text-muted-foreground">{xp} XP</span>}
-            </div>
+          {/* Hint Text Area */}
+          <div className="mt-2.5 flex min-h-[60px] items-center rounded-lg border border-border/50 bg-background/50 p-3">
             {hintText ? (
-              <p className="text-xs leading-relaxed text-foreground/80">{hintText}</p>
+              <p className="text-xs leading-relaxed text-foreground">{hintText}</p>
             ) : (
-              <p className="text-[11px] text-muted-foreground">
-                Stuck? Ask for a hint (costs 5 XP)
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Ask for a progressive hint without spoiling the solution.</span>
               </p>
             )}
-            <button
-              onClick={handleHint}
-              disabled={hintLevel >= 3}
-              className="w-full rounded-md bg-muted/40 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 disabled:opacity-40"
-            >
-              {hintLevel === 0 && 'Get Hint (5 XP)'}
-              {hintLevel === 1 && 'More specific (5 XP)'}
-              {hintLevel === 2 && 'Show move (5 XP)'}
-              {hintLevel === 3 && 'Full hint revealed'}
-            </button>
           </div>
-        )}
 
-        {/* Mirror Bot info */}
-        {mirrorInfo && (
-          <div className="rounded-lg border border-[#C9A24B]/30 bg-[#C9A24B]/5 px-3 py-2 text-xs text-[#C9A24B]">
-            🪞 {mirrorInfo}
-          </div>
-        )}
+          <button
+            onClick={handleHint}
+            disabled={hintLevel >= 3 || !isPlayerTurn}
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            <span>
+              {hintLevel === 0 && 'Get Socratic Hint (-5 XP)'}
+              {hintLevel === 1 && 'Narrow Down Square (-5 XP)'}
+              {hintLevel === 2 && 'Reveal Best Move (-5 XP)'}
+              {hintLevel === 3 && 'Full Hint Revealed'}
+            </span>
+          </button>
+        </div>
 
-        {/* Difficulty selector */}
-        <div className="space-y-2 rounded-lg border border-border bg-card p-4">
-          <h3 className="text-sm font-semibold text-foreground">Difficulty</h3>
-          <div className="grid grid-cols-1 gap-1">
-            {STATIC_DIFFICULTY_LEVELS.map((d) => (
-              <button
-                key={d.label}
-                onClick={() => handleDifficultyChange(d as DifficultyLevel)}
-                disabled={d.label === '🪞 Mirror' && !mirrorProfile}
-                className={cn(
-                  'flex items-center justify-between rounded px-3 py-1.5 text-sm transition-colors',
-                  difficulty.label === d.label ||
-                    (difficulty.label === '🪞 Mirror' && d.label === '🪞 Mirror')
-                    ? 'bg-[#C9A24B]/20 font-semibold text-[#C9A24B]'
-                    : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground',
-                  d.label === '🪞 Mirror' && !mirrorProfile && 'cursor-not-allowed opacity-40',
-                )}
-              >
-                <span>{d.label}</span>
-                <span className="text-xs opacity-60">{d.elo}</span>
-              </button>
-            ))}
+        {/* Bot Level Selector */}
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold text-foreground">Select Opponent</h3>
+            <span className="text-[10px] text-muted-foreground">Stockfish 18</span>
           </div>
-          {!mirrorProfile && (
-            <p className="text-[10px] text-muted-foreground">
-              Import &amp; analyze a game to unlock Mirror Bot.
-            </p>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {STATIC_DIFFICULTY_LEVELS.map((d) => {
+              const isSelected =
+                difficulty.label === d.label ||
+                (difficulty.label === 'Mirror Bot' && d.label === 'Mirror Bot');
+              const isMirror = d.label === 'Mirror Bot';
+              const isLocked = isMirror && !mirrorProfile;
+
+              return (
+                <button
+                  key={d.label}
+                  onClick={() => handleDifficultyChange(d as DifficultyLevel)}
+                  disabled={isLocked}
+                  className={cn(
+                    'flex flex-col items-start rounded-xl border p-2.5 text-left transition-all',
+                    isSelected
+                      ? 'border-primary bg-primary/10 text-primary shadow-sm'
+                      : 'border-border/50 bg-background/40 text-muted-foreground hover:border-border hover:bg-card hover:text-foreground',
+                    isLocked && 'cursor-not-allowed opacity-40',
+                  )}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span className="text-xs font-semibold">{d.label}</span>
+                    {isMirror && <Crown className="h-3 w-3 text-primary" />}
+                  </div>
+                  <span className="mt-0.5 font-mono text-[10px] opacity-70">{d.elo}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {mirrorInfo && (
+            <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-[11px] leading-snug text-primary">
+              🪞 {mirrorInfo}
+            </div>
           )}
         </div>
 
-        {/* Move list */}
-        <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
-          <h3 className="border-b border-border px-4 py-2 text-sm font-semibold text-foreground">
-            Moves
-          </h3>
+        {/* Move Ledger */}
+        <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm">
+          <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
+            <h3 className="text-xs font-semibold text-foreground">Move History</h3>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {chess.history.length} plies
+            </span>
+          </div>
           <MoveList
             history={chess.history}
             currentIndex={chess.historyIndex}
-            className="flex-1 p-2"
+            className="max-h-48 flex-1 p-2"
           />
         </div>
 
-        {/* Controls */}
-        <div className="flex gap-2">
+        {/* Board Controls Toolbar */}
+        <div className="grid grid-cols-4 gap-2">
           <button
             onClick={handleNewGame}
-            className="flex-1 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            className="flex flex-col items-center justify-center gap-1 rounded-xl bg-primary py-2.5 text-[11px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+            title="Reset to starting position"
           >
-            New Game
+            <RotateCcw className="h-4 w-4" />
+            <span>New</span>
           </button>
           <button
             onClick={() => setIs3DMode(!is3DMode)}
-            className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/40"
+            className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-card/80 py-2.5 text-[11px] font-medium text-foreground hover:bg-accent"
+            title="Toggle between 2D and 3D board view"
           >
-            {is3DMode ? '2D Mode' : '3D Mode'}
+            {is3DMode ? <Layers className="h-4 w-4" /> : <Box className="h-4 w-4" />}
+            <span>{is3DMode ? '2D View' : '3D View'}</span>
           </button>
           <button
             onClick={handleFlipBoard}
-            className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/40"
+            className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-card/80 py-2.5 text-[11px] font-medium text-foreground hover:bg-accent"
+            title="Flip board orientation"
           >
-            Flip
+            <ArrowUpDown className="h-4 w-4" />
+            <span>Flip</span>
           </button>
           <button
             onClick={() => {
               if (chess.turn === engineColor) {
-                // Engine is thinking, just undo player's last move
                 chess.undoMove();
                 engine.stopAnalysis();
-              } else {
-                // Player's turn, undo engine's last move and player's previous move
-                if (chess.history.length >= 2) {
-                  chess.undoMove();
-                  chess.undoMove();
-                  engine.stopAnalysis();
-                }
+              } else if (chess.history.length >= 2) {
+                chess.undoMove();
+                chess.undoMove();
+                engine.stopAnalysis();
               }
             }}
             disabled={chess.history.length === 0}
-            className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/40 disabled:opacity-40"
+            className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-card/80 py-2.5 text-[11px] font-medium text-foreground hover:bg-accent disabled:opacity-40"
+            title="Undo last move"
           >
-            Undo
+            <RotateCcw className="h-4 w-4" />
+            <span>Undo</span>
           </button>
         </div>
       </div>

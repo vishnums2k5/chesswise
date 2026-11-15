@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { Save, Check, User, Globe, Zap } from 'lucide-react';
 
 interface Settings {
   displayName: string | null;
@@ -30,8 +31,8 @@ function SettingField({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">{label}</label>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      <label className="text-xs font-semibold text-foreground">{label}</label>
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
       <input
         type="text"
         value={value}
@@ -39,9 +40,9 @@ function SettingField({
         placeholder={placeholder}
         readOnly={readOnly}
         className={cn(
-          'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground',
-          'placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
-          readOnly && 'cursor-not-allowed opacity-60',
+          'w-full rounded-xl border border-border/70 bg-background/60 px-3.5 py-2.5 text-xs text-foreground',
+          'placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary',
+          readOnly && 'cursor-not-allowed bg-muted/20 opacity-60',
         )}
       />
     </div>
@@ -100,21 +101,33 @@ export default function SettingsPage() {
     setSaving(false);
   };
 
-  if (loading)
-    return <div className="animate-pulse text-muted-foreground">Loading settings...</div>;
+  if (loading) {
+    return (
+      <div className="flex h-72 flex-col items-center justify-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-sm text-muted-foreground">Loading account preferences…</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="mx-auto max-w-2xl space-y-6 pb-12">
+      {/* Header */}
       <div>
-        <h1 className="font-serif text-2xl font-bold text-foreground">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage your account and platform preferences.
+        <h1 className="font-serif text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          Account &amp; Engine Settings
+        </h1>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Manage your personal chess identity and external platform sync preferences.
         </p>
       </div>
 
-      {/* Profile */}
-      <section className="space-y-5 rounded-xl border border-border bg-card p-6">
-        <h2 className="text-base font-semibold text-foreground">Profile</h2>
+      {/* Profile Section */}
+      <section className="space-y-4 rounded-2xl border border-border/60 bg-card/70 p-6 backdrop-blur-sm">
+        <div className="flex items-center gap-2 border-b border-border/40 pb-3">
+          <User className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">User Profile</h2>
+        </div>
 
         {form.avatarUrl && (
           <div className="flex items-center gap-4">
@@ -122,46 +135,49 @@ export default function SettingsPage() {
             <img
               src={form.avatarUrl}
               alt="Avatar preview"
-              className="h-14 w-14 rounded-full border border-border object-cover"
+              className="h-12 w-12 rounded-full border border-primary/40 object-cover"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
-            <p className="text-xs text-muted-foreground">Avatar preview</p>
+            <p className="text-[11px] text-muted-foreground">Live avatar preview</p>
           </div>
         )}
 
         <SettingField
           label="Display Name"
-          placeholder="Your name"
+          placeholder="Your grandmaster handle"
           value={form.displayName}
           onChange={(v) => setForm((f) => ({ ...f, displayName: v }))}
         />
         <SettingField
-          label="Email"
+          label="Email Address"
           value={settings?.email ?? ''}
           readOnly
-          hint="Email cannot be changed here. Use Supabase Auth to update it."
+          hint="Managed via Supabase Auth identity."
         />
         <SettingField
-          label="Avatar URL"
+          label="Avatar Image URL"
           placeholder="https://example.com/avatar.png"
-          hint="Paste any public image URL."
+          hint="Public HTTPS link for your profile picture."
           value={form.avatarUrl}
           onChange={(v) => setForm((f) => ({ ...f, avatarUrl: v }))}
         />
       </section>
 
-      {/* Platform usernames */}
-      <section className="space-y-5 rounded-xl border border-border bg-card p-6">
-        <h2 className="text-base font-semibold text-foreground">Chess Platforms</h2>
+      {/* External Platforms */}
+      <section className="space-y-4 rounded-2xl border border-border/60 bg-card/70 p-6 backdrop-blur-sm">
+        <div className="flex items-center gap-2 border-b border-border/40 pb-3">
+          <Globe className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">Platform Integrations</h2>
+        </div>
         <p className="text-xs text-muted-foreground">
-          Saved usernames will pre-fill the Import page so you don&apos;t have to type them each
-          time.
+          Pre-fills the PGN Importer so you can fetch matches from Lichess and Chess.com with 1
+          click.
         </p>
         <SettingField
           label="Lichess Username"
-          placeholder="e.g. magnus"
+          placeholder="e.g. magnuscarlsen"
           value={form.lichessUsername}
           onChange={(v) => setForm((f) => ({ ...f, lichessUsername: v }))}
         />
@@ -173,33 +189,44 @@ export default function SettingsPage() {
         />
       </section>
 
-      {/* XP info (read-only) */}
+      {/* Experience & Level */}
       {settings && (
-        <section className="space-y-3 rounded-xl border border-border bg-card p-6">
-          <h2 className="text-base font-semibold text-foreground">Progress</h2>
+        <section className="rounded-2xl border border-border/60 bg-card/70 p-6 backdrop-blur-sm">
+          <div className="mb-4 flex items-center gap-2 border-b border-border/40 pb-3">
+            <Zap className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Level Status</h2>
+          </div>
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
-              {settings.level}
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-primary/40 bg-primary/10 font-mono text-base font-bold text-primary">
+              Lv {settings.level}
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium">Level {settings.level}</p>
-              <p className="text-xs text-muted-foreground">{settings.xp} XP total</p>
+            <div>
+              <p className="text-xs font-semibold text-foreground">
+                Level {settings.level} Tactician
+              </p>
+              <p className="font-mono text-[11px] text-muted-foreground">
+                {settings.xp.toLocaleString()} XP accumulated
+              </p>
             </div>
           </div>
         </section>
       )}
 
-      {/* Save */}
-      <div className="flex items-center gap-4">
+      {/* Save Button */}
+      <div className="flex items-center gap-3 pt-2">
         <button
           onClick={handleSave}
           disabled={saving}
-          className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
         >
-          {saving ? 'Saving...' : 'Save Changes'}
+          <Save className="h-4 w-4" />
+          <span>{saving ? 'Saving changes…' : 'Save Changes'}</span>
         </button>
         {saved && (
-          <span className="text-sm font-medium text-good animate-in fade-in">✓ Saved!</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 animate-in fade-in">
+            <Check className="h-4 w-4" />
+            <span>Preferences updated</span>
+          </span>
         )}
       </div>
     </div>

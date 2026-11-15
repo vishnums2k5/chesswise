@@ -9,6 +9,21 @@ import { AnnotationGlyph } from '@/components/chess/annotation-glyph';
 import ChatPanel from '@/components/coach/chat-panel';
 import BranchExplorer from '@/components/chess/branch-explorer';
 import { cn } from '@/lib/utils';
+import {
+  Volume2,
+  VolumeX,
+  MessageSquare,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
+  GitFork,
+  ExternalLink,
+  Sparkles,
+  TrendingDown,
+  CheckCircle2,
+  AlertTriangle,
+} from 'lucide-react';
 
 type MoveQuality = 'BRILLIANT' | 'EXCELLENT' | 'GOOD' | 'INACCURACY' | 'MISTAKE' | 'BLUNDER';
 
@@ -46,7 +61,7 @@ interface Game {
   moves: GameMove[];
 }
 
-// SVG Eval Graph
+// Enhanced SVG Eval Graph with hover scrub & gradient
 function EvalGraph({
   moves,
   currentIdx,
@@ -57,13 +72,13 @@ function EvalGraph({
   onSeek: (idx: number) => void;
 }) {
   const W = 100,
-    H = 60;
+    H = 64;
   const points = moves.map((m, i) => {
     const cp = m.evalAfter ?? 0;
     const clamped = Math.max(-800, Math.min(800, cp));
     const x = (i / Math.max(1, moves.length - 1)) * W;
     const y = H / 2 - (clamped / 800) * (H / 2);
-    return { x, y, move: m, idx: i };
+    return { x, y, move: m, idx: i, cp };
   });
 
   const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
@@ -77,57 +92,97 @@ function EvalGraph({
       : '';
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="h-24 w-full overflow-hidden rounded-lg border border-border"
-      preserveAspectRatio="none"
-    >
-      {/* Background */}
-      <rect width={W} height={H} fill="#1D2229" />
-      {/* Centre line */}
-      <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="#4a3728" strokeWidth="0.5" />
-      {/* White advantage area */}
-      <path d={areaWhiteD} fill="#EDE6D650" />
-      {/* Black advantage area */}
-      <path d={areaBlackD} fill="#12151a80" />
-      {/* Eval line */}
-      <path d={pathD} fill="none" stroke="#C9A24B" strokeWidth="0.8" />
-      {/* Blunder dots */}
-      {points
-        .filter((p) => p.move.quality === 'BLUNDER')
-        .map((p) => (
-          <circle key={p.idx} cx={p.x} cy={p.y} r={1.5} fill="#9B3B3B" />
-        ))}
-      {/* Current position indicator */}
-      {points[currentIdx] && (
+    <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card/60 p-3 backdrop-blur-sm">
+      <div className="flex items-center justify-between pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span>Centipawn Advantage Curve</span>
+        <span className="font-mono text-[10px]">
+          {points[currentIdx]
+            ? `${points[currentIdx]!.cp > 0 ? '+' : ''}${(points[currentIdx]!.cp / 100).toFixed(2)}`
+            : '0.00'}
+        </span>
+      </div>
+
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="h-28 w-full overflow-hidden rounded-lg bg-background/50"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <linearGradient id="whiteAdvantage" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#C9A24B" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#C9A24B" stopOpacity="0.05" />
+          </linearGradient>
+          <linearGradient id="blackAdvantage" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#9B3B3B" stopOpacity="0.05" />
+            <stop offset="100%" stopColor="#9B3B3B" stopOpacity="0.35" />
+          </linearGradient>
+        </defs>
+
+        {/* Centre equality line */}
         <line
-          x1={points[currentIdx]!.x}
-          y1={0}
-          x2={points[currentIdx]!.x}
-          y2={H}
-          stroke="#C9A24B"
+          x1={0}
+          y1={H / 2}
+          x2={W}
+          y2={H / 2}
+          stroke="#3b4252"
           strokeWidth="0.5"
-          strokeDasharray="2"
+          strokeDasharray="1 2"
         />
-      )}
-      {/* Click zones */}
-      {points.map((p) => (
-        <rect
-          key={p.idx}
-          x={p.x - W / moves.length / 2}
-          y={0}
-          width={W / moves.length}
-          height={H}
-          fill="transparent"
-          className="cursor-pointer"
-          onClick={() => onSeek(p.idx)}
-        />
-      ))}
-    </svg>
+
+        {/* Advantage areas */}
+        <path d={areaWhiteD} fill="url(#whiteAdvantage)" />
+        <path d={areaBlackD} fill="url(#blackAdvantage)" />
+
+        {/* Main curve */}
+        <path d={pathD} fill="none" stroke="#C9A24B" strokeWidth="1" strokeLinecap="round" />
+
+        {/* Blunder & Mistake Markers */}
+        {points
+          .filter((p) => p.move.quality === 'BLUNDER')
+          .map((p) => (
+            <circle
+              key={p.idx}
+              cx={p.x}
+              cy={p.y}
+              r={2}
+              fill="#9B3B3B"
+              stroke="#ffffff"
+              strokeWidth="0.4"
+            />
+          ))}
+
+        {/* Current position needle */}
+        {points[currentIdx] && (
+          <line
+            x1={points[currentIdx]!.x}
+            y1={0}
+            x2={points[currentIdx]!.x}
+            y2={H}
+            stroke="#EDE6D6"
+            strokeWidth="0.75"
+            strokeDasharray="2"
+          />
+        )}
+
+        {/* Interactive Scrub Hotspots */}
+        {points.map((p) => (
+          <rect
+            key={p.idx}
+            x={p.x - W / Math.max(1, moves.length) / 2}
+            y={0}
+            width={W / Math.max(1, moves.length)}
+            height={H}
+            fill="transparent"
+            className="cursor-pointer"
+            onClick={() => onSeek(p.idx)}
+          />
+        ))}
+      </svg>
+    </div>
   );
 }
 
-// Mistake Card
+// Modern SaaS Mistake Card
 function MistakeCard({
   move,
   onTryIt,
@@ -161,71 +216,91 @@ function MistakeCard({
     setOverriding(false);
   };
 
+  const isBlunder = move.quality === 'BLUNDER';
+
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center gap-2">
-        {glyph && <AnnotationGlyph type={glyph} />}
-        <span className="font-mono text-sm font-semibold text-foreground">
-          {Math.ceil(move.moveNumber)}
-          {move.color === 'w' ? '.' : '...'} {move.san}
-        </span>
-        {move.tacticTag && (
-          <span className="ml-auto rounded bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
-            {move.tacticTag.replace(/_/g, ' ')}
+    <div
+      className={cn(
+        'rounded-xl border p-4 transition-all',
+        isBlunder
+          ? 'border-blunder/30 bg-blunder/10 hover:border-blunder/50'
+          : 'border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50',
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {glyph && <AnnotationGlyph type={glyph} size="sm" />}
+          <span className="font-mono text-sm font-bold text-foreground">
+            {Math.ceil(move.moveNumber)}
+            {move.color === 'w' ? '.' : '...'} {move.san}
           </span>
-        )}
-        {overridden && (
-          <span className="ml-auto rounded bg-good/20 px-2 py-0.5 text-[10px] text-good">
+          {move.tacticTag && (
+            <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+              {move.tacticTag.replace(/_/g, ' ')}
+            </span>
+          )}
+        </div>
+
+        {overridden ? (
+          <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
             Overridden ✓
           </span>
+        ) : (
+          move.evalDelta != null && (
+            <span className="flex items-center gap-1 font-mono text-xs font-semibold text-blunder">
+              <TrendingDown className="h-3 w-3" />
+              <span>{(move.evalDelta / 100).toFixed(2)}</span>
+            </span>
+          )
         )}
       </div>
 
       {move.bestMoveSan && (
-        <p className="text-xs text-muted-foreground">
-          Best: <span className="font-mono text-foreground">{move.bestMoveSan}</span>
-          {move.evalDelta != null && (
-            <span className="ml-2 text-destructive">
-              ({(move.evalDelta / 100).toFixed(2)} eval swing)
-            </span>
-          )}
-        </p>
+        <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-background/50 px-3 py-1.5 text-xs">
+          <span className="text-muted-foreground">Engine Best:</span>
+          <span className="font-mono font-bold text-emerald-400">{move.bestMoveSan}</span>
+        </div>
       )}
 
       {move.explanation && (
-        <p className="text-sm leading-relaxed text-foreground/80">{move.explanation}</p>
+        <p className="mt-2 text-xs leading-relaxed text-foreground/90">{move.explanation}</p>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2.5 border-t border-border/40 pt-2.5">
         <button
           onClick={() => onTryIt(move.fenBefore)}
-          className="text-xs text-[#C9A24B] hover:underline"
+          className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
         >
-          Try it in Analysis →
+          <span>Try in Analysis</span>
+          <ExternalLink className="h-3 w-3" />
         </button>
+
         {onAskCoach && move.quality && (
           <button
             onClick={() => onAskCoach(move.san, move.quality!)}
-            className="text-xs text-blue-400 hover:underline"
+            className="flex items-center gap-1 text-xs font-semibold text-blue-400 hover:underline"
           >
-            💬 Ask Coach
+            <MessageSquare className="h-3 w-3" />
+            <span>Ask Coach</span>
           </button>
         )}
+
         {onExplore && (
           <button
             onClick={() =>
               onExplore(move.fenBefore, `${Math.ceil(move.moveNumber / 2)}. ${move.san}`)
             }
-            className="text-xs text-purple-400 hover:underline"
+            className="flex items-center gap-1 text-xs font-semibold text-purple-400 hover:underline"
           >
-            🔀 Explore
+            <GitFork className="h-3 w-3" />
+            <span>Explore Line</span>
           </button>
         )}
 
         {!overridden && !overriding && (
           <button
             onClick={() => setOverriding(true)}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            className="ml-auto text-[11px] text-muted-foreground hover:text-foreground"
           >
             Disagree with AI?
           </button>
@@ -233,28 +308,28 @@ function MistakeCard({
       </div>
 
       {overriding && (
-        <div className="space-y-2 border-t border-border pt-1">
+        <div className="mt-3 space-y-2 rounded-lg border border-border/60 bg-background/70 p-3">
           <p className="text-xs text-muted-foreground">
-            State your reason for overriding this classification:
+            Provide your tactical reasoning to adjust your model calibration:
           </p>
           <textarea
             value={overrideReason}
             onChange={(e) => setOverrideReason(e.target.value)}
-            placeholder="e.g. This was forced — there was no better move available."
+            placeholder="e.g. This sacrifice leads to an unstoppable perpetual check…"
             rows={2}
-            className="w-full resize-none rounded border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full resize-none rounded-lg border border-border bg-background p-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
           <div className="flex gap-2">
             <button
               onClick={submitOverride}
               disabled={!overrideReason.trim()}
-              className="rounded bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
             >
               Submit Override
             </button>
             <button
               onClick={() => setOverriding(false)}
-              className="rounded border border-border px-3 py-1 text-xs text-muted-foreground hover:text-foreground"
+              className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
             >
               Cancel
             </button>
@@ -297,17 +372,17 @@ export default function ReportPage() {
     const topBlunder = game.moves.find((m) => m.quality === 'BLUNDER' || m.quality === 'MISTAKE');
 
     let text = `Here is your game recap. `;
-    const openingName = (game.headers as any)['Opening'];
+    const openingName = game.headers['Opening'];
     if (openingName) {
-      text += `The opening was the ${openingName}. `;
+      text += `The opening played was ${openingName}. `;
     }
 
     if (mistakeCount === 0) {
-      text += `You played a nearly flawless game. Excellent work!`;
+      text += `You played a nearly flawless game. Master level precision!`;
     } else {
-      text += `Overall, there were ${mistakeCount} inaccuracies or mistakes in this game. `;
+      text += `Across the match, you made ${mistakeCount} inaccuracies or mistakes. `;
       if (topBlunder) {
-        text += `Your most critical moment was move ${Math.ceil(topBlunder.moveNumber / 2)}, where you played ${topBlunder.san}. `;
+        text += `The turning point arrived on move ${Math.ceil(topBlunder.moveNumber / 2)}, where you played ${topBlunder.san}. `;
         if (topBlunder.explanation) {
           text += topBlunder.explanation;
         }
@@ -348,7 +423,7 @@ export default function ReportPage() {
 
   const handleAskCoach = (san: string, quality: string) => {
     setCoachMessage(
-      `In this game, I played ${san} which was a ${quality.toLowerCase()}. Why was this a mistake and what should I have played instead?`,
+      `In this game, I played ${san} which was classified as a ${quality.toLowerCase()}. Why was this sub-optimal and what tactical sequence did I miss?`,
     );
     setCoachOpen(true);
   };
@@ -360,16 +435,21 @@ export default function ReportPage() {
 
   if (loading) {
     return (
-      <div className="flex h-64 animate-pulse items-center justify-center text-muted-foreground">
-        Loading report...
+      <div className="flex h-72 flex-col items-center justify-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-sm text-muted-foreground">Synthesizing deep engine report…</p>
       </div>
     );
   }
 
   if (!game) {
     return (
-      <div className="mt-20 text-center text-muted-foreground">
-        Game not found or not yet analyzed.
+      <div className="flex h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-border p-8 text-center">
+        <AlertTriangle className="h-8 w-8 text-amber-400" />
+        <h3 className="mt-3 font-serif text-lg font-bold text-foreground">Game Report Not Found</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          This game may not have finished processing or has expired.
+        </p>
       </div>
     );
   }
@@ -387,149 +467,195 @@ export default function ReportPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+      {/* Match Header Bar */}
+      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-border/60 bg-card/70 p-5 backdrop-blur-sm sm:flex-row sm:items-center">
         <div>
-          <h1 className="font-serif text-xl font-bold text-foreground">
-            {h['White'] ?? '?'} <span className="text-base text-muted-foreground">vs</span>{' '}
-            {h['Black'] ?? '?'}
-          </h1>
-          <p className="mt-0.5 flex items-center gap-2 text-sm text-muted-foreground">
-            {h['Date'] ?? ''} · {h['Result'] ?? ''} · {h['Event'] ?? 'Game'}
+          <div className="flex items-center gap-2">
+            <h1 className="font-serif text-xl font-bold text-foreground sm:text-2xl">
+              {h['White'] ?? 'White'} <span className="text-sm text-muted-foreground">vs</span>{' '}
+              {h['Black'] ?? 'Black'}
+            </h1>
+            <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs font-semibold text-muted-foreground">
+              {h['Result'] ?? '*'}
+            </span>
+          </div>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span>{h['Date'] ?? 'Recent'}</span>
+            <span>•</span>
+            <span>{h['Event'] ?? 'Casual Match'}</span>
+            {h['Opening'] && (
+              <>
+                <span>•</span>
+                <span className="text-foreground">{h['Opening']}</span>
+              </>
+            )}
+
+            {/* Audio Voice Recap Button */}
             <button
               onClick={handlePlayRecap}
               className={cn(
-                'ml-2 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                'flex items-center gap-1.5 rounded-full border px-3 py-1 font-medium transition-all',
                 isPlayingRecap
-                  ? 'animate-pulse border-primary/30 bg-primary/20 text-primary'
-                  : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted',
+                  ? 'border-primary/50 bg-primary/20 text-primary shadow-[0_0_12px_rgba(201,162,75,0.25)]'
+                  : 'border-border/70 bg-card text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
             >
-              {isPlayingRecap ? '🔊 Playing...' : '🔊 Play Recap'}
+              {isPlayingRecap ? (
+                <>
+                  <VolumeX className="h-3.5 w-3.5 text-primary" />
+                  <span>Stop Recap</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="h-3.5 w-3.5 text-primary" />
+                  <span>Audio Recap</span>
+                </>
+              )}
             </button>
-          </p>
+          </div>
         </div>
+
+        {/* Accuracy Badge */}
         {game.accuracy != null && (
-          <div className="text-right">
-            <p className="font-mono text-2xl font-bold text-[#C9A24B]">
-              {game.accuracy.toFixed(1)}%
-            </p>
-            <p className="text-xs text-muted-foreground">Accuracy</p>
+          <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-background/50 px-4 py-3 sm:text-right">
+            <div>
+              <p className="font-mono text-2xl font-black text-primary">
+                {game.accuracy.toFixed(1)}%
+              </p>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Move Accuracy
+              </p>
+            </div>
           </div>
         )}
       </div>
 
+      {/* Main Studio Grid: Board on Left, Telemetry & Mistakes on Right */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[auto_1fr]">
-        {/* Left: Board */}
+        {/* Left Column: Board & Navigation */}
         <div className="flex flex-col items-center gap-3">
           <ChessBoard fen={chess.fen} lastMove={lastMove} interactive={false} />
-          {/* Move navigation */}
-          <div className="flex items-center gap-2 text-sm">
-            <button
-              onClick={() => seekToMove(-1)}
-              className="rounded border border-border px-2 py-1 text-muted-foreground hover:text-foreground"
-            >
-              ⏮
-            </button>
-            <button
-              onClick={() => seekToMove(Math.max(-1, currentMoveIdx - 1))}
-              className="rounded border border-border px-2 py-1 text-muted-foreground hover:text-foreground"
-            >
-              ◀
-            </button>
-            <span className="w-20 text-center text-xs text-muted-foreground">
+
+          {/* Stepper Navigation */}
+          <div className="flex w-full max-w-[min(90vw,560px)] items-center justify-between rounded-xl border border-border/60 bg-card/70 px-4 py-2 backdrop-blur-sm">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => seekToMove(-1)}
+                disabled={currentMoveIdx <= -1}
+                className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                title="First move"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => seekToMove(Math.max(-1, currentMoveIdx - 1))}
+                disabled={currentMoveIdx <= -1}
+                className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                title="Previous move"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </div>
+
+            <span className="font-mono text-xs font-semibold text-foreground">
               {currentMoveIdx >= 0 && currentMove
-                ? `Move ${currentMove.moveNumber}${currentMove.color === 'b' ? '...' : '.'}`
-                : 'Start'}
+                ? `Move ${Math.ceil(currentMove.moveNumber / 2)}${currentMove.color === 'b' ? '...' : '.'} ${currentMove.san}`
+                : 'Start Position'}
             </span>
-            <button
-              onClick={() => seekToMove(Math.min(game.moves.length - 1, currentMoveIdx + 1))}
-              className="rounded border border-border px-2 py-1 text-muted-foreground hover:text-foreground"
-            >
-              ▶
-            </button>
-            <button
-              onClick={() => seekToMove(game.moves.length - 1)}
-              className="rounded border border-border px-2 py-1 text-muted-foreground hover:text-foreground"
-            >
-              ⏭
-            </button>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => seekToMove(Math.min(game.moves.length - 1, currentMoveIdx + 1))}
+                disabled={currentMoveIdx >= game.moves.length - 1}
+                className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                title="Next move"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => seekToMove(game.moves.length - 1)}
+                disabled={currentMoveIdx >= game.moves.length - 1}
+                className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                title="Final move"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Right: Analysis */}
+        {/* Right Column: Eval Curve, Move History, & Mistake Cards */}
         <div className="space-y-4">
-          {/* Eval Graph */}
+          {/* Interactive Advantage Curve */}
           {game.moves.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Evaluation Graph
-              </p>
-              <EvalGraph moves={game.moves} currentIdx={currentMoveIdx} onSeek={seekToMove} />
-            </div>
+            <EvalGraph moves={game.moves} currentIdx={currentMoveIdx} onSeek={seekToMove} />
           )}
 
-          {/* Move list (compact inline scoresheet) */}
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
-            <div className="border-b border-border px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Moves
+          {/* Scoresheet Move Ledger */}
+          <div className="overflow-hidden rounded-xl border border-border/60 bg-card/70 backdrop-blur-sm">
+            <div className="border-b border-border/50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Game Scoresheet ({game.moves.length} plies)
             </div>
-            <div className="max-h-48 overflow-y-auto p-2 font-mono text-sm">
+            <div className="max-h-48 overflow-y-auto p-3 font-mono text-xs leading-relaxed">
               {Array.from({ length: Math.ceil(game.moves.length / 2) }).map((_, pairIdx) => {
                 const wMove = game.moves[pairIdx * 2];
                 const bMove = game.moves[pairIdx * 2 + 1];
                 return (
-                  <span key={pairIdx} className="inline">
-                    <span className="text-muted-foreground">{pairIdx + 1}. </span>
+                  <span key={pairIdx} className="mr-3 inline-block">
+                    <span className="text-muted-foreground/60">{pairIdx + 1}. </span>
                     {wMove && (
                       <button
                         onClick={() => seekToMove(pairIdx * 2)}
                         className={cn(
-                          'rounded px-0.5 transition-colors',
+                          'rounded px-1 py-0.5 transition-colors',
                           currentMoveIdx === pairIdx * 2
-                            ? 'bg-[#C9A24B]/20 text-[#C9A24B]'
-                            : 'hover:bg-muted/40',
+                            ? 'bg-primary/20 font-bold text-primary'
+                            : 'text-foreground hover:bg-accent',
                         )}
                       >
                         {wMove.san}
-                        {wMove.quality &&
-                          wMove.quality !== 'EXCELLENT' &&
-                          wMove.quality !== 'GOOD' && (
-                            <sup className="ml-0.5 text-[9px]">{QUALITY_GLYPH[wMove.quality]}</sup>
-                          )}
+                        {wMove.quality && wMove.quality !== 'GOOD' && (
+                          <sup className="ml-0.5 text-[9px] text-primary">
+                            {QUALITY_GLYPH[wMove.quality]}
+                          </sup>
+                        )}
                       </button>
                     )}{' '}
                     {bMove && (
                       <button
                         onClick={() => seekToMove(pairIdx * 2 + 1)}
                         className={cn(
-                          'rounded px-0.5 transition-colors',
+                          'rounded px-1 py-0.5 transition-colors',
                           currentMoveIdx === pairIdx * 2 + 1
-                            ? 'bg-[#C9A24B]/20 text-[#C9A24B]'
-                            : 'hover:bg-muted/40',
+                            ? 'bg-primary/20 font-bold text-primary'
+                            : 'text-foreground hover:bg-accent',
                         )}
                       >
                         {bMove.san}
-                        {bMove.quality &&
-                          bMove.quality !== 'EXCELLENT' &&
-                          bMove.quality !== 'GOOD' && (
-                            <sup className="ml-0.5 text-[9px]">{QUALITY_GLYPH[bMove.quality]}</sup>
-                          )}
+                        {bMove.quality && bMove.quality !== 'GOOD' && (
+                          <sup className="ml-0.5 text-[9px] text-primary">
+                            {QUALITY_GLYPH[bMove.quality]}
+                          </sup>
+                        )}
                       </button>
-                    )}{' '}
+                    )}
                   </span>
                 );
               })}
             </div>
           </div>
 
-          {/* Mistake cards */}
-          {mistakes.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Mistakes &amp; Blunders ({mistakes.length})
-              </p>
-              <div className="max-h-96 space-y-2 overflow-y-auto">
+          {/* Mistake Ledger */}
+          {mistakes.length > 0 ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Identified Mistakes ({mistakes.length})
+                </span>
+                <span className="text-[11px] text-muted-foreground">Spaced Repetition Ready</span>
+              </div>
+              <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
                 {mistakes.map((m) => (
                   <MistakeCard
                     key={m.id}
@@ -541,28 +667,30 @@ export default function ReportPage() {
                 ))}
               </div>
             </div>
-          )}
-
-          {mistakes.length === 0 && game.status === 'PROFILE_UPDATED' && (
-            <div className="rounded-lg border border-good/30 bg-good/10 px-4 py-3 text-sm text-good">
-              🎉 No significant mistakes found. Excellent game!
+          ) : (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs font-semibold text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>
+                Zero critical blunders detected across all moves. Exceptional game execution!
+              </span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Floating Coach FAB */}
+      {/* Floating Ask Coach FAB */}
       <button
         onClick={() => {
           setCoachMessage('');
           setCoachOpen((o) => !o);
         }}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg transition-all hover:bg-primary/90"
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-xs font-bold text-primary-foreground shadow-2xl transition-all duration-150 hover:bg-primary/90 hover:shadow-[0_0_20px_rgba(201,162,75,0.4)]"
       >
-        💬 {coachOpen ? 'Close Coach' : 'Ask Coach'}
+        <Sparkles className="h-4 w-4" />
+        <span>{coachOpen ? 'Close Coach' : 'Ask Socratic Coach'}</span>
       </button>
 
-      {/* Floating coach panel */}
+      {/* Floating Socratic Coach Dialog */}
       {coachOpen && (
         <div className="fixed bottom-20 right-6 z-50 shadow-2xl">
           <ChatPanel
@@ -574,7 +702,7 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* What-if Branch Explorer modal */}
+      {/* What-If Branch Explorer Modal */}
       {branchFen && (
         <BranchExplorer
           startFen={branchFen}
