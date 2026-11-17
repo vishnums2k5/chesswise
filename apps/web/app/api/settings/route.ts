@@ -11,7 +11,7 @@ export async function GET(_req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const dbUser = await prisma.user.findUnique({
+    let dbUser = await prisma.user.findUnique({
       where: { supabaseId: user.id },
       select: {
         displayName: true,
@@ -29,7 +29,32 @@ export async function GET(_req: NextRequest) {
       },
     });
 
-    if (!dbUser) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!dbUser) {
+      dbUser = await prisma.user.upsert({
+        where: { supabaseId: user.id },
+        create: {
+          supabaseId: user.id,
+          email: user.email ?? 'player@chesswise.app',
+          displayName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Player',
+          avatarUrl: user.user_metadata?.avatar_url || null,
+        },
+        update: {},
+        select: {
+          displayName: true,
+          avatarUrl: true,
+          email: true,
+          lichessUsername: true,
+          chessComUsername: true,
+          xp: true,
+          level: true,
+          aiProvider: true,
+          geminiApiKey: true,
+          openaiApiKey: true,
+          openrouterApiKey: true,
+          customModel: true,
+        },
+      });
+    }
 
     const safeSettings = {
       displayName: dbUser.displayName,

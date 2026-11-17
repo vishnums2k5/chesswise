@@ -155,6 +155,15 @@ export default function SettingsPage() {
   // Key visibility toggles
   const [showKey, setShowKey] = useState(false);
 
+  // Key replacement state (when key is already saved)
+  const [isReplacingKey, setIsReplacingKey] = useState<Record<AiProvider, boolean>>({
+    gemini: false,
+    openai: false,
+    openrouter: false,
+  });
+  const [savingAiKey, setSavingAiKey] = useState(false);
+  const [aiKeySavedSuccess, setAiKeySavedSuccess] = useState(false);
+
   // Key testing state
   const [testingKey, setTestingKey] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -238,6 +247,64 @@ export default function SettingsPage() {
       console.error('Failed to save settings:', e);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveAiKey = async () => {
+    setSavingAiKey(true);
+    setAiKeySavedSuccess(false);
+
+    try {
+      const provider = form.aiProvider;
+      let keyToSave = '';
+      if (provider === 'gemini') keyToSave = form.geminiApiKey;
+      else if (provider === 'openai') keyToSave = form.openaiApiKey;
+      else if (provider === 'openrouter') keyToSave = form.openrouterApiKey;
+
+      const payload: Record<string, any> = {
+        aiProvider: provider,
+        customModel: form.customModel,
+      };
+
+      if (provider === 'gemini') {
+        if (form.removeGeminiApiKey) payload.removeGeminiApiKey = true;
+        else if (keyToSave) payload.geminiApiKey = keyToSave;
+      } else if (provider === 'openai') {
+        if (form.removeOpenaiApiKey) payload.removeOpenaiApiKey = true;
+        else if (keyToSave) payload.openaiApiKey = keyToSave;
+      } else if (provider === 'openrouter') {
+        if (form.removeOpenrouterApiKey) payload.removeOpenrouterApiKey = true;
+        else if (keyToSave) payload.openrouterApiKey = keyToSave;
+      }
+
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.settings) {
+          setSettings((prev) => (prev ? { ...prev, ...data.settings } : data.settings));
+          setForm((prev) => ({
+            ...prev,
+            geminiApiKey: '',
+            openaiApiKey: '',
+            openrouterApiKey: '',
+            removeGeminiApiKey: false,
+            removeOpenaiApiKey: false,
+            removeOpenrouterApiKey: false,
+          }));
+          setIsReplacingKey((prev) => ({ ...prev, [provider]: false }));
+        }
+        setAiKeySavedSuccess(true);
+        setTimeout(() => setAiKeySavedSuccess(false), 4000);
+      }
+    } catch (err) {
+      console.error('Failed to save AI key:', err);
+    } finally {
+      setSavingAiKey(false);
     }
   };
 
@@ -401,85 +468,199 @@ export default function SettingsPage() {
           </a>
         </div>
 
-        {/* API Key Input Field */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-              <Key className="h-3.5 w-3.5 text-primary" />
-              <span>{activeProviderMeta.name} API Key</span>
-            </label>
-            {hasSavedKeyForProvider && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>Key saved securely</span>
-              </span>
-            )}
-          </div>
+        {/* API Key Management Area */}
+        <div className="space-y-3">
+          {hasSavedKeyForProvider && !isReplacingKey[form.aiProvider] ? (
+            /* Active Stored Key Banner - Crystal clear visual proof that the key is saved */
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 transition-all">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-foreground">
+                        {activeProviderMeta.name} Connected
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        <Check className="h-3 w-3" /> Saved in Database
+                      </span>
+                    </div>
+                    <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                      Stored Key:{' '}
+                      <span className="font-semibold text-foreground">{maskedKeyForProvider}</span>
+                    </p>
+                  </div>
+                </div>
 
-          <div className="relative">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={currentEnteredKey}
-              onChange={(e) => {
-                const val = e.target.value;
-                setForm((f) => ({
-                  ...f,
-                  geminiApiKey: f.aiProvider === 'gemini' ? val : f.geminiApiKey,
-                  openaiApiKey: f.aiProvider === 'openai' ? val : f.openaiApiKey,
-                  openrouterApiKey: f.aiProvider === 'openrouter' ? val : f.openrouterApiKey,
-                  removeGeminiApiKey: f.aiProvider === 'gemini' ? false : f.removeGeminiApiKey,
-                  removeOpenaiApiKey: f.aiProvider === 'openai' ? false : f.removeOpenaiApiKey,
-                  removeOpenrouterApiKey:
-                    f.aiProvider === 'openrouter' ? false : f.removeOpenrouterApiKey,
-                }));
-                setTestResult(null);
-              }}
-              placeholder={
-                hasSavedKeyForProvider
-                  ? (maskedKeyForProvider ?? activeProviderMeta.keyPlaceholder)
-                  : activeProviderMeta.keyPlaceholder
-              }
-              className="w-full rounded-xl border border-border/70 bg-background/60 py-2.5 pl-3.5 pr-20 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey(!showKey)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              title={showKey ? 'Hide key' : 'Show key'}
-            >
-              {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTestKey}
+                    disabled={testingKey}
+                    className="flex items-center gap-1.5 rounded-lg border border-border/80 bg-background/80 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-card active:scale-95 disabled:opacity-50"
+                  >
+                    {testingKey ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3 w-3 text-primary" />
+                    )}
+                    <span>{testingKey ? 'Testing…' : 'Test Key'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReplacingKey((p) => ({ ...p, [form.aiProvider]: true }));
+                      setTestResult(null);
+                    }}
+                    className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 active:scale-95"
+                  >
+                    Replace Key
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const payload: Record<string, any> = { aiProvider: form.aiProvider };
+                      if (form.aiProvider === 'gemini') payload.removeGeminiApiKey = true;
+                      if (form.aiProvider === 'openai') payload.removeOpenaiApiKey = true;
+                      if (form.aiProvider === 'openrouter') payload.removeOpenrouterApiKey = true;
+                      const res = await fetch('/api/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        if (data.settings)
+                          setSettings((prev) =>
+                            prev ? { ...prev, ...data.settings } : data.settings,
+                          );
+                      }
+                      setTestResult(null);
+                    }}
+                    className="flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/20 active:scale-95"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    <span>Remove</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Key Input & Save Form */
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                  <Key className="h-3.5 w-3.5 text-primary" />
+                  <span>
+                    {isReplacingKey[form.aiProvider]
+                      ? `Replace ${activeProviderMeta.name} API Key`
+                      : `Enter ${activeProviderMeta.name} API Key`}
+                  </span>
+                </label>
+                {isReplacingKey[form.aiProvider] && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReplacingKey((p) => ({ ...p, [form.aiProvider]: false }));
+                      setForm((f) => ({
+                        ...f,
+                        geminiApiKey: '',
+                        openaiApiKey: '',
+                        openrouterApiKey: '',
+                      }));
+                      setTestResult(null);
+                    }}
+                    className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel Replacement
+                  </button>
+                )}
+              </div>
 
-          {hasSavedKeyForProvider && (
-            <div className="flex items-center justify-between pt-1">
-              <p className="text-[11px] text-muted-foreground">
-                Current key:{' '}
-                <span className="font-mono text-foreground">{maskedKeyForProvider}</span>
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setForm((f) => ({
-                    ...f,
-                    removeGeminiApiKey: f.aiProvider === 'gemini' ? true : f.removeGeminiApiKey,
-                    removeOpenaiApiKey: f.aiProvider === 'openai' ? true : f.removeOpenaiApiKey,
-                    removeOpenrouterApiKey:
-                      f.aiProvider === 'openrouter' ? true : f.removeOpenrouterApiKey,
-                    geminiApiKey: f.aiProvider === 'gemini' ? '' : f.geminiApiKey,
-                    openaiApiKey: f.aiProvider === 'openai' ? '' : f.openaiApiKey,
-                    openrouterApiKey: f.aiProvider === 'openrouter' ? '' : f.openrouterApiKey,
-                  }));
-                  setTestResult(null);
-                }}
-                className="flex items-center gap-1 text-[11px] font-medium text-red-400 hover:text-red-300"
-              >
-                <Trash2 className="h-3 w-3" />
-                <span>Remove Key</span>
-              </button>
+              <div className="relative">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={currentEnteredKey}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setForm((f) => ({
+                      ...f,
+                      geminiApiKey: f.aiProvider === 'gemini' ? val : f.geminiApiKey,
+                      openaiApiKey: f.aiProvider === 'openai' ? val : f.openaiApiKey,
+                      openrouterApiKey: f.aiProvider === 'openrouter' ? val : f.openrouterApiKey,
+                      removeGeminiApiKey: f.aiProvider === 'gemini' ? false : f.removeGeminiApiKey,
+                      removeOpenaiApiKey: f.aiProvider === 'openai' ? false : f.removeOpenaiApiKey,
+                      removeOpenrouterApiKey:
+                        f.aiProvider === 'openrouter' ? false : f.removeOpenrouterApiKey,
+                    }));
+                    setTestResult(null);
+                  }}
+                  placeholder={activeProviderMeta.keyPlaceholder}
+                  className="w-full rounded-xl border border-border/70 bg-background/60 py-2.5 pl-3.5 pr-20 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  title={showKey ? 'Hide key' : 'Show key'}
+                >
+                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {/* Direct Save & Test Buttons in the BYOK Section */}
+              <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveAiKey}
+                    disabled={savingAiKey || !currentEnteredKey.trim()}
+                    className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+                  >
+                    {savingAiKey ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="h-3.5 w-3.5" />
+                    )}
+                    <span>{savingAiKey ? 'Saving to Database…' : 'Save & Activate Key'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleTestKey}
+                    disabled={testingKey || !currentEnteredKey.trim()}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background/80 px-4 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-card active:scale-95 disabled:opacity-50"
+                  >
+                    {testingKey ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    )}
+                    <span>{testingKey ? 'Testing connection…' : 'Test Key Connection'}</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Persisted in private PostgreSQL record</span>
+                </div>
+              </div>
             </div>
           )}
         </div>
+
+        {/* Key Saved Success Banner */}
+        {aiKeySavedSuccess && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-medium text-emerald-400 animate-in fade-in">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            <span>
+              API key saved successfully to your database record! It is now permanently active
+              across sessions and page refreshes.
+            </span>
+          </div>
+        )}
 
         {/* Model Selection / Custom Model Input */}
         <div className="space-y-2">
@@ -519,44 +700,37 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Test Connection Button & Status */}
-        <div className="flex flex-col gap-2.5 pt-1 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            onClick={handleTestKey}
-            disabled={testingKey}
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-card px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 active:scale-95 disabled:opacity-50"
-          >
-            {testingKey ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5" />
-            )}
-            <span>{testingKey ? 'Testing connection…' : 'Test Key Connection'}</span>
-          </button>
-
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            <span>Encrypted in private database record</span>
-          </div>
-        </div>
-
-        {/* Test Result Message Banner */}
+        {/* Test Result Message Banner with One-Click Save */}
         {testResult && (
           <div
             className={cn(
-              'flex items-start gap-2.5 rounded-xl border p-3 text-xs animate-in fade-in',
+              'flex flex-col gap-2.5 rounded-xl border p-3 text-xs animate-in fade-in',
               testResult.ok
                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
                 : 'border-red-500/30 bg-red-500/10 text-red-400',
             )}
           >
-            {testResult.ok ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-            ) : (
-              <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+            <div className="flex items-start gap-2.5">
+              {testResult.ok ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+              ) : (
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+              )}
+              <p className="leading-relaxed">{testResult.message}</p>
+            </div>
+            {testResult.ok && currentEnteredKey.trim() && (
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={handleSaveAiKey}
+                  disabled={savingAiKey}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition-all hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  <span>{savingAiKey ? 'Saving…' : 'Save & Activate This Verified Key'}</span>
+                </button>
+              </div>
             )}
-            <p className="leading-relaxed">{testResult.message}</p>
           </div>
         )}
       </section>
