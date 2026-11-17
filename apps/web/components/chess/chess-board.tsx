@@ -185,22 +185,15 @@ export default function ChessBoard({
   return (
     <div
       className={cn(
-        'relative inline-block rounded-sm transition-transform duration-500',
-        is3D ? 'shadow-[0_20px_0_0_#222] ring-0' : 'ring-4 ring-[#333]',
+        'relative flex aspect-square w-full items-center justify-center rounded-2xl border border-border/70 bg-card/60 p-2 shadow-2xl backdrop-blur-sm transition-transform duration-500 sm:p-3',
+        is3D ? 'shadow-[0_20px_0_0_#222] ring-0' : '',
       )}
       style={{
         transform: is3D ? 'perspective(1200px) rotateX(50deg) translateY(-20px)' : 'none',
         transformStyle: 'preserve-3d',
       }}
     >
-      <div
-        style={{
-          width: 'min(90vw, 85vh, 760px)',
-          height: 'min(90vw, 85vh, 760px)',
-          maxWidth: '760px',
-          maxHeight: '760px',
-        }}
-      >
+      <div className="aspect-square h-full max-h-full w-full max-w-full">
         <Chessboard
           options={{
             position: fen,

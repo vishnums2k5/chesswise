@@ -302,7 +302,7 @@ export default function PlayPage() {
       {/* Chessboard & Studio Stage */}
       <div className="flex flex-1 flex-col items-center justify-start gap-3">
         {/* Opponent Player Card (Top) */}
-        <div className="flex w-full max-w-[min(90vw,560px)] items-center justify-between rounded-xl border border-border/60 bg-card/70 px-4 py-2.5 backdrop-blur-sm">
+        <div className="flex w-full max-w-[min(100%,calc(100vh-210px),820px)] items-center justify-between rounded-xl border border-border/60 bg-card/70 px-4 py-2.5 shadow-sm backdrop-blur-sm transition-all">
           <div className="flex items-center gap-3">
             <div className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
               <Bot className="h-4 w-4" />
@@ -341,8 +341,8 @@ export default function PlayPage() {
           </div>
         </div>
 
-        {/* Board Container */}
-        <div className="relative flex w-full max-w-[min(90vw,560px)] justify-center">
+        {/* Board Container (Strictly Square, Fluid Responsive Stage) */}
+        <div className="relative flex aspect-square w-full max-w-[min(100%,calc(100vh-210px),820px)] justify-center">
           {is3DMode ? (
             <ChessBoard3D
               fen={chess.fen}
@@ -363,7 +363,7 @@ export default function PlayPage() {
         </div>
 
         {/* Player Card (Bottom) */}
-        <div className="flex w-full max-w-[min(90vw,560px)] items-center justify-between rounded-xl border border-border/60 bg-card/70 px-4 py-2.5 backdrop-blur-sm">
+        <div className="flex w-full max-w-[min(100%,calc(100vh-210px),820px)] items-center justify-between rounded-xl border border-border/60 bg-card/70 px-4 py-2.5 shadow-sm backdrop-blur-sm transition-all">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/40 bg-card font-serif text-xs font-bold text-primary">
               YOU
@@ -396,7 +396,7 @@ export default function PlayPage() {
       </div>
 
       {/* Side Studio Control Deck */}
-      <div className="flex w-full flex-col gap-4 lg:w-80">
+      <div className="flex w-full flex-col gap-4 lg:w-80 xl:w-[350px]">
         {/* Game Result Banner */}
         {gameStatus && (
           <div

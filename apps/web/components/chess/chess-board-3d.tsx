@@ -1,10 +1,12 @@
 'use client';
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import { useSpring, a } from '@react-spring/three';
 import { Square, Chess, fenToPieceMap, getLegalMovesForSquare } from '@chesswise/chess-core';
 import { Text } from '@react-three/drei';
+import { RotateCcw } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const SQUARE_SIZE = 1;
 const BOARD_OFFSET = (8 * SQUARE_SIZE) / 2 - SQUARE_SIZE / 2;
@@ -88,11 +90,13 @@ function Piece({ data, orientation, onClick, isSelected }: any) {
       }}
     >
       <meshPhysicalMaterial
-        color={data.color === 'w' ? '#d9d9d9' : '#4a4a4a'}
-        metalness={0.2}
-        roughness={0.2}
-        clearcoat={0.8}
-        clearcoatRoughness={0.2}
+        color={data.color === 'w' ? '#f5f5f7' : '#26272e'}
+        emissive={isSelected ? (data.color === 'w' ? '#c9a24b' : '#d4af37') : '#000000'}
+        emissiveIntensity={isSelected ? 0.4 : 0}
+        metalness={data.color === 'w' ? 0.08 : 0.22}
+        roughness={data.color === 'w' ? 0.16 : 0.22}
+        clearcoat={0.9}
+        clearcoatRoughness={0.12}
       />
     </a.mesh>
   );
@@ -111,7 +115,7 @@ function BoardSquares({ orientation, selected, legalTargets, onSquareClick, piec
       const isCapture = isLegal && pieces.some((p: any) => p.square === sq);
 
       let color = isBlack ? '#739552' : '#EBECD0';
-      if (isSelected) color = '#f5f682';
+      if (isSelected) color = '#f7d070';
 
       squares.push(
         <group key={sq} position={[x, 0.01, z]}>
@@ -124,18 +128,22 @@ function BoardSquares({ orientation, selected, legalTargets, onSquareClick, piec
             receiveShadow
           >
             <planeGeometry args={[SQUARE_SIZE, SQUARE_SIZE]} />
-            <meshStandardMaterial color={color} />
+            <meshStandardMaterial color={color} roughness={0.35} metalness={0.05} />
           </mesh>
           {isLegal && !isCapture && (
-            <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <circleGeometry args={[0.15, 32]} />
-              <meshBasicMaterial color="#000" opacity={0.25} transparent />
+            <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[0.16, 32]} />
+              <meshBasicMaterial
+                color={isBlack ? '#1b3320' : '#475569'}
+                opacity={0.4}
+                transparent
+              />
             </mesh>
           )}
           {isLegal && isCapture && (
-            <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[0.35, 0.45, 32]} />
-              <meshBasicMaterial color="#000" opacity={0.25} transparent />
+            <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.34, 0.44, 32]} />
+              <meshBasicMaterial color="#ef4444" opacity={0.65} transparent />
             </mesh>
           )}
         </group>,
@@ -145,17 +153,33 @@ function BoardSquares({ orientation, selected, legalTargets, onSquareClick, piec
   return <group>{squares}</group>;
 }
 
+interface ChessBoard3DProps {
+  fen: string;
+  orientation?: 'white' | 'black';
+  onMove?: (from: Square, to: Square) => void;
+  interactive?: boolean;
+  className?: string;
+}
+
 export default function ChessBoard3D({
   fen,
   orientation = 'white',
   onMove,
   interactive = true,
-}: any) {
+  className,
+}: ChessBoard3DProps) {
   const [pieces, setPieces] = useState<PieceData[]>([]);
   const [selected, setSelected] = useState<Square | null>(null);
   const [legalTargets, setLegalTargets] = useState<Square[]>([]);
+  const controlsRef = useRef<any>(null);
 
   const game = useMemo(() => new Chess(fen), [fen]);
+
+  const handleResetCamera = useCallback(() => {
+    if (controlsRef.current) {
+      controlsRef.current.reset();
+    }
+  }, []);
 
   // Sync FEN to pieces with stable IDs for animation
   useEffect(() => {
@@ -238,11 +262,53 @@ export default function ChessBoard3D({
   );
 
   return (
-    <div className="h-full min-h-[600px] w-full overflow-hidden rounded-lg bg-[#222] ring-4 ring-[#333]">
-      <Canvas shadows camera={{ position: [0, 4.5, 5.5], fov: 60 }}>
-        <ambientLight intensity={0.5} />
-        <spotLight position={[10, 10, 10]} angle={0.2} penumbra={1} intensity={1} castShadow />
-        <pointLight position={[-10, -10, -10]} intensity={0.5} />
+    <div
+      className={cn(
+        'relative aspect-square w-full select-none overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-b from-[#181a20] via-[#121318] to-[#0c0d12] shadow-2xl ring-1 ring-white/5',
+        className,
+      )}
+    >
+      {/* Floating 3D HUD Controls */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between p-3">
+        <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[11px] font-medium text-white/75 shadow-sm backdrop-blur-md">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+          <span>3D Studio</span>
+          <span className="text-white/40">•</span>
+          <span className="hidden text-white/50 sm:inline">Drag to rotate • Scroll to zoom</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleResetCamera}
+          className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[11px] font-medium text-white/80 shadow-sm backdrop-blur-md transition-all hover:border-white/20 hover:bg-black/80 hover:text-white active:scale-95"
+          title="Reset 3D camera to default orientation"
+        >
+          <RotateCcw className="h-3 w-3" />
+          <span>Reset View</span>
+        </button>
+      </div>
+
+      <Canvas
+        shadows
+        camera={{ position: [0, 5.8, 6.2], fov: 52 }}
+        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+      >
+        <ambientLight intensity={0.55} />
+        <directionalLight
+          position={[8, 14, 10]}
+          intensity={1.1}
+          castShadow
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-camera-near={0.5}
+          shadow-camera-far={25}
+          shadow-camera-left={-6}
+          shadow-camera-right={6}
+          shadow-camera-top={6}
+          shadow-camera-bottom={-6}
+          shadow-bias={-0.0005}
+        />
+        <pointLight position={[-8, 6, -8]} intensity={0.35} color="#8ab4f8" />
 
         <BoardSquares
           orientation={orientation}
@@ -267,7 +333,7 @@ export default function ChessBoard3D({
         {/* Board Base / Frame */}
         <mesh position={[0, -0.3, 0]} receiveShadow>
           <boxGeometry args={[8 * SQUARE_SIZE + 0.8, 0.5, 8 * SQUARE_SIZE + 0.8]} />
-          <meshStandardMaterial color="#333" />
+          <meshStandardMaterial color="#1a1c23" roughness={0.45} metalness={0.12} />
         </mesh>
 
         {/* Coordinates */}
@@ -285,7 +351,7 @@ export default function ChessBoard3D({
                   position={[pos, 0.01, BOARD_OFFSET + 0.65]}
                   rotation={[-Math.PI / 2, 0, 0]}
                   fontSize={0.25}
-                  color="#e5e5e5"
+                  color="#94a3b8"
                 >
                   {fileStr}
                 </Text>
@@ -294,7 +360,7 @@ export default function ChessBoard3D({
                   position={[pos, 0.01, -(BOARD_OFFSET + 0.65)]}
                   rotation={[-Math.PI / 2, 0, Math.PI]}
                   fontSize={0.25}
-                  color="#e5e5e5"
+                  color="#94a3b8"
                 >
                   {fileStr}
                 </Text>
@@ -303,7 +369,7 @@ export default function ChessBoard3D({
                   position={[-(BOARD_OFFSET + 0.65), 0.01, pos]}
                   rotation={[-Math.PI / 2, 0, Math.PI / 2]}
                   fontSize={0.25}
-                  color="#e5e5e5"
+                  color="#94a3b8"
                 >
                   {rankStr}
                 </Text>
@@ -312,7 +378,7 @@ export default function ChessBoard3D({
                   position={[BOARD_OFFSET + 0.65, 0.01, pos]}
                   rotation={[-Math.PI / 2, 0, -Math.PI / 2]}
                   fontSize={0.25}
-                  color="#e5e5e5"
+                  color="#94a3b8"
                 >
                   {rankStr}
                 </Text>
@@ -321,13 +387,17 @@ export default function ChessBoard3D({
           })}
         </group>
 
-        <ContactShadows position={[0, -0.04, 0]} opacity={0.4} scale={10} blur={2} far={4} />
+        <ContactShadows position={[0, -0.04, 0]} opacity={0.45} scale={11} blur={2} far={4} />
         <OrbitControls
+          ref={controlsRef}
           enablePan={false}
+          enableDamping={true}
+          dampingFactor={0.06}
+          rotateSpeed={0.8}
           minPolarAngle={Math.PI / 6}
-          maxPolarAngle={Math.PI / 2.5}
-          minDistance={5}
-          maxDistance={15}
+          maxPolarAngle={Math.PI / 2.3}
+          minDistance={5.5}
+          maxDistance={14}
         />
         <Environment preset="city" />
       </Canvas>
