@@ -46,6 +46,11 @@ model User {
   level            Int      @default(1)
   coachId          String?  @map("coach_id") @db.Uuid
   isPro            Boolean  @default(false) @map("is_pro")
+  aiProvider       String   @default("gemini") @map("ai_provider")
+  geminiApiKey     String?  @map("gemini_api_key")
+  openaiApiKey     String?  @map("openai_api_key")
+  openrouterApiKey String?  @map("openrouter_api_key")
+  customModel      String?  @map("custom_model")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 

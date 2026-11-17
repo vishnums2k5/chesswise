@@ -17,6 +17,9 @@ export interface ExplainInput {
   quality: string; // BLUNDER | MISTAKE | etc.
   tacticTag: string | null;
   fenBefore: string;
+  customApiKey?: string | null;
+  provider?: 'gemini' | 'openai' | 'openrouter';
+  customModel?: string | null;
 }
 
 export interface ExplainResult {
@@ -24,21 +27,34 @@ export interface ExplainResult {
   modelUsed: string;
 }
 
-const MODEL_NAME = 'gemini-1.5-flash';
+const DEFAULT_MODEL = 'gemini-1.5-flash';
 
 /**
- * Calls Gemini to generate a short, grounded coaching explanation.
+ * Generates a short, grounded coaching explanation using Gemini, OpenAI, or OpenRouter.
  * The prompt strictly forbids fabricating moves or evaluations not in the input.
  */
 export async function explainMistake(input: ExplainInput): Promise<ExplainResult | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const provider = input.provider || 'gemini';
+  let apiKey = input.customApiKey?.trim() || null;
+
   if (!apiKey) {
-    console.warn('[llm-explainer] GEMINI_API_KEY not set — skipping explanation');
+    if (provider === 'gemini') apiKey = process.env.GEMINI_API_KEY || null;
+    else if (provider === 'openai') apiKey = process.env.OPENAI_API_KEY || null;
+    else if (provider === 'openrouter') apiKey = process.env.OPENROUTER_API_KEY || null;
+  }
+
+  if (!apiKey) {
+    console.warn(`[llm-explainer] No API key available for ${provider} — skipping explanation`);
     return null;
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  const modelName =
+    input.customModel?.trim() ||
+    (provider === 'openai'
+      ? 'gpt-4o-mini'
+      : provider === 'openrouter'
+        ? 'meta-llama/llama-3.3-70b-instruct'
+        : DEFAULT_MODEL);
 
   const evalBeforeFormatted = formatEval(input.evalBefore);
   const evalAfterFormatted = formatEval(input.evalAfter);
@@ -68,12 +84,50 @@ STRICT RULES:
 Write the coaching note now:`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
+    let text = '';
+
+    if (provider === 'gemini') {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      text = result.response.text().trim();
+    } else {
+      const endpoint =
+        provider === 'openrouter'
+          ? 'https://openrouter.ai/api/v1/chat/completions'
+          : 'https://api.openai.com/v1/chat/completions';
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      };
+
+      if (provider === 'openrouter') {
+        headers['HTTP-Referer'] = 'https://chesswise-web.vercel.app';
+        headers['X-Title'] = 'Chesswise Analysis Worker';
+      }
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: modelName,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Provider returned HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      text = data.choices?.[0]?.message?.content?.trim() || '';
+    }
 
     // Validate with Zod
     const parsed = ExplanationSchema.parse({ explanation: text });
-    return { explanation: parsed.explanation, modelUsed: MODEL_NAME };
+    return { explanation: parsed.explanation, modelUsed: modelName };
   } catch (err) {
     console.error('[llm-explainer] Failed to generate explanation:', err);
     return null;

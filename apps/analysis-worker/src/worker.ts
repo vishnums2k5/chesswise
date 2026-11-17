@@ -171,6 +171,23 @@ async function processGame(gameId: string): Promise<void> {
 
   console.log(`[worker] Generating explanations for ${mistakeMoves.length} mistakes...`);
 
+  const userConfig = await prisma.user.findFirst({
+    where: { games: { some: { id: gameId } } },
+    select: {
+      aiProvider: true,
+      geminiApiKey: true,
+      openaiApiKey: true,
+      openrouterApiKey: true,
+      customModel: true,
+    },
+  });
+
+  const provider = (userConfig?.aiProvider || 'gemini') as 'gemini' | 'openai' | 'openrouter';
+  let customApiKey: string | null = null;
+  if (provider === 'gemini') customApiKey = userConfig?.geminiApiKey ?? null;
+  else if (provider === 'openai') customApiKey = userConfig?.openaiApiKey ?? null;
+  else if (provider === 'openrouter') customApiKey = userConfig?.openrouterApiKey ?? null;
+
   for (const m of mistakeMoves) {
     if (!m.bestMoveSan || m.evalBefore === null || m.evalAfter === null) continue;
     const result = await explainMistake({
@@ -181,6 +198,9 @@ async function processGame(gameId: string): Promise<void> {
       quality: m.quality,
       tacticTag: m.tacticTag,
       fenBefore: m.fenBefore,
+      provider,
+      customApiKey,
+      customModel: userConfig?.customModel,
     });
 
     if (result) {

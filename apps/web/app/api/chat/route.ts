@@ -2,9 +2,13 @@ import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import { buildCoachContext } from '@/lib/coach-context';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const MODEL = 'gemini-1.5-flash';
+import {
+  streamLlmResponse,
+  AiProvider,
+  resolveApiKey,
+  PROVIDER_LABELS,
+  ChatMessageTurn,
+} from '@/lib/llm-provider';
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -23,7 +27,17 @@ export async function POST(req: NextRequest) {
 
   if (!message?.trim()) return new Response('message is required', { status: 400 });
 
-  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } });
+  const dbUser = await prisma.user.findUnique({
+    where: { supabaseId: user.id },
+    select: {
+      id: true,
+      aiProvider: true,
+      geminiApiKey: true,
+      openaiApiKey: true,
+      openrouterApiKey: true,
+      customModel: true,
+    },
+  });
   if (!dbUser) return new Response('User not found', { status: 404 });
 
   // Get or create chat session
@@ -56,17 +70,26 @@ export async function POST(req: NextRequest) {
     take: 20,
   });
 
-  // Build grounded context
+  // Build grounded RAG context from games, skill profile, and board state
   const { systemPrompt } = await buildCoachContext(dbUser.id, {
     gameId: gameId ?? session.gameId ?? undefined,
     fen,
   });
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  // Determine active AI provider and key
+  const provider = (dbUser.aiProvider || 'gemini') as AiProvider;
+  let customKey: string | null = null;
+  if (provider === 'gemini') customKey = dbUser.geminiApiKey;
+  else if (provider === 'openai') customKey = dbUser.openaiApiKey;
+  else if (provider === 'openrouter') customKey = dbUser.openrouterApiKey;
+
+  const apiKey = resolveApiKey(provider, customKey);
+
   if (!apiKey) {
-    // Graceful degradation
-    const fallback =
-      "I'm sorry, the AI coach is temporarily unavailable. Please add a GEMINI_API_KEY to enable coaching.";
+    // Graceful degradation when key is missing
+    const providerName = PROVIDER_LABELS[provider] || provider;
+    const fallback = `I'm sorry, no API key is configured for ${providerName}. Please add your API key in Settings > AI & RAG Configuration to activate coaching.`;
+
     await prisma.chatMessage.create({
       data: { sessionId: session.id, role: 'ASSISTANT', content: fallback },
     });
@@ -76,21 +99,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: MODEL,
-    systemInstruction: systemPrompt,
-  });
-
-  // Build chat history for Gemini (exclude current message)
-  const chatHistory = history
-    .slice(0, -1) // exclude the message we just saved
-    .map((m) => ({
-      role: m.role === 'USER' ? 'user' : 'model',
-      parts: [{ text: m.content }],
-    }));
-
-  const chat = model.startChat({ history: chatHistory });
+  // Format history for LLM (exclude the message we just saved)
+  const chatHistory: ChatMessageTurn[] = history.slice(0, -1).map((m) => ({
+    role: m.role === 'USER' ? 'user' : 'assistant',
+    content: m.content,
+  }));
 
   // Stream response as SSE
   const encoder = new TextEncoder();
@@ -99,20 +112,28 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        const result = await chat.sendMessageStream(message);
+        const streamGenerator = streamLlmResponse({
+          provider,
+          apiKey,
+          customModel: dbUser.customModel,
+          systemPrompt,
+          history: chatHistory,
+          message,
+        });
 
-        for await (const chunk of result.stream) {
-          const text = chunk.text();
-          fullResponse += text;
+        for await (const chunk of streamGenerator) {
+          fullResponse += chunk;
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ text, sessionId: session!.id })}\n\n`),
+            encoder.encode(`data: ${JSON.stringify({ text: chunk, sessionId: session!.id })}\n\n`),
           );
         }
 
         // Persist the full assistant response
-        await prisma.chatMessage.create({
-          data: { sessionId: session!.id, role: 'ASSISTANT', content: fullResponse },
-        });
+        if (fullResponse.trim()) {
+          await prisma.chatMessage.create({
+            data: { sessionId: session!.id, role: 'ASSISTANT', content: fullResponse },
+          });
+        }
 
         // Auto-update session title from first message if default
         if (session!.title === 'New conversation') {
@@ -125,12 +146,12 @@ export async function POST(req: NextRequest) {
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ done: true, sessionId: session!.id })}\n\n`),
         );
-      } catch (err) {
-        console.error('[chat] Gemini error:', err);
+      } catch (err: any) {
+        console.error(`[chat] ${provider} error:`, err);
+        const errMsg =
+          err?.message || 'Coach encountered an error. Please check your API key in Settings.';
         controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ error: 'Coach error. Please try again.', done: true })}\n\n`,
-          ),
+          encoder.encode(`data: ${JSON.stringify({ error: errMsg, done: true })}\n\n`),
         );
       } finally {
         controller.close();
