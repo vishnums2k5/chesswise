@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { getActiveClientByok } from '@/lib/client-byok';
 
 interface Message {
   id?: string;
@@ -98,9 +99,21 @@ export default function ChatPanel({
     ]);
 
     try {
+      const clientByok = getActiveClientByok();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (clientByok.key) {
+        headers['x-user-api-key'] = clientByok.key;
+        headers['x-user-ai-provider'] = clientByok.provider;
+        if (clientByok.customModel) {
+          headers['x-user-custom-model'] = clientByok.customModel;
+        }
+      }
+
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ message: text, sessionId, gameId, fen }),
       });
 

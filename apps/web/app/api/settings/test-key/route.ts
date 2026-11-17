@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
     }
 
     let effectiveKey = apiKey?.trim();
+    const headerKey = req.headers.get('x-user-api-key')?.trim();
+    if (headerKey && !effectiveKey) effectiveKey = headerKey;
 
     // If key is masked or omitted, check database for saved key
     if (!effectiveKey || effectiveKey.includes('••••')) {

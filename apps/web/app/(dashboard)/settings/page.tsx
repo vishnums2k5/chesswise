@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { maskApiKey } from '@/lib/key-security';
+import {
+  saveClientApiKey,
+  getClientApiKey,
+  removeClientApiKey,
+  getActiveClientByok,
+} from '@/lib/client-byok';
 import {
   Save,
   Check,
@@ -152,6 +159,17 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Local browser-side keys (localStorage)
+  const [localKeys, setLocalKeys] = useState<{
+    gemini: string | null;
+    openai: string | null;
+    openrouter: string | null;
+  }>({
+    gemini: null,
+    openai: null,
+    openrouter: null,
+  });
+
   // Key visibility toggles
   const [showKey, setShowKey] = useState(false);
 
@@ -169,6 +187,27 @@ export default function SettingsPage() {
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
+    // 1. Instantly load keys from browser's localStorage (zero latency, survives refresh)
+    const geminiLocal = getClientApiKey('gemini');
+    const openaiLocal = getClientApiKey('openai');
+    const openrouterLocal = getClientApiKey('openrouter');
+    const activeClient = getActiveClientByok();
+
+    setLocalKeys({
+      gemini: geminiLocal,
+      openai: openaiLocal,
+      openrouter: openrouterLocal,
+    });
+
+    if (activeClient.provider) {
+      setForm((prev) => ({
+        ...prev,
+        aiProvider: activeClient.provider,
+        customModel: activeClient.customModel || prev.customModel,
+      }));
+    }
+
+    // 2. Fetch server database settings and merge
     fetch('/api/settings')
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP error ${r.status}`);
@@ -210,14 +249,35 @@ export default function SettingsPage() {
         customModel: form.customModel,
       };
 
-      if (form.removeGeminiApiKey) payload.removeGeminiApiKey = true;
-      else if (form.geminiApiKey) payload.geminiApiKey = form.geminiApiKey;
+      if (form.removeGeminiApiKey) {
+        payload.removeGeminiApiKey = true;
+        removeClientApiKey('gemini');
+        setLocalKeys((p) => ({ ...p, gemini: null }));
+      } else if (form.geminiApiKey) {
+        payload.geminiApiKey = form.geminiApiKey;
+        saveClientApiKey('gemini', form.geminiApiKey, form.customModel);
+        setLocalKeys((p) => ({ ...p, gemini: form.geminiApiKey }));
+      }
 
-      if (form.removeOpenaiApiKey) payload.removeOpenaiApiKey = true;
-      else if (form.openaiApiKey) payload.openaiApiKey = form.openaiApiKey;
+      if (form.removeOpenaiApiKey) {
+        payload.removeOpenaiApiKey = true;
+        removeClientApiKey('openai');
+        setLocalKeys((p) => ({ ...p, openai: null }));
+      } else if (form.openaiApiKey) {
+        payload.openaiApiKey = form.openaiApiKey;
+        saveClientApiKey('openai', form.openaiApiKey, form.customModel);
+        setLocalKeys((p) => ({ ...p, openai: form.openaiApiKey }));
+      }
 
-      if (form.removeOpenrouterApiKey) payload.removeOpenrouterApiKey = true;
-      else if (form.openrouterApiKey) payload.openrouterApiKey = form.openrouterApiKey;
+      if (form.removeOpenrouterApiKey) {
+        payload.removeOpenrouterApiKey = true;
+        removeClientApiKey('openrouter');
+        setLocalKeys((p) => ({ ...p, openrouter: null }));
+      } else if (form.openrouterApiKey) {
+        payload.openrouterApiKey = form.openrouterApiKey;
+        saveClientApiKey('openrouter', form.openrouterApiKey, form.customModel);
+        setLocalKeys((p) => ({ ...p, openrouter: form.openrouterApiKey }));
+      }
 
       const res = await fetch('/api/settings', {
         method: 'POST',
@@ -267,14 +327,35 @@ export default function SettingsPage() {
       };
 
       if (provider === 'gemini') {
-        if (form.removeGeminiApiKey) payload.removeGeminiApiKey = true;
-        else if (keyToSave) payload.geminiApiKey = keyToSave;
+        if (form.removeGeminiApiKey) {
+          payload.removeGeminiApiKey = true;
+          removeClientApiKey('gemini');
+          setLocalKeys((p) => ({ ...p, gemini: null }));
+        } else if (keyToSave) {
+          payload.geminiApiKey = keyToSave;
+          saveClientApiKey('gemini', keyToSave, form.customModel);
+          setLocalKeys((p) => ({ ...p, gemini: keyToSave }));
+        }
       } else if (provider === 'openai') {
-        if (form.removeOpenaiApiKey) payload.removeOpenaiApiKey = true;
-        else if (keyToSave) payload.openaiApiKey = keyToSave;
+        if (form.removeOpenaiApiKey) {
+          payload.removeOpenaiApiKey = true;
+          removeClientApiKey('openai');
+          setLocalKeys((p) => ({ ...p, openai: null }));
+        } else if (keyToSave) {
+          payload.openaiApiKey = keyToSave;
+          saveClientApiKey('openai', keyToSave, form.customModel);
+          setLocalKeys((p) => ({ ...p, openai: keyToSave }));
+        }
       } else if (provider === 'openrouter') {
-        if (form.removeOpenrouterApiKey) payload.removeOpenrouterApiKey = true;
-        else if (keyToSave) payload.openrouterApiKey = keyToSave;
+        if (form.removeOpenrouterApiKey) {
+          payload.removeOpenrouterApiKey = true;
+          removeClientApiKey('openrouter');
+          setLocalKeys((p) => ({ ...p, openrouter: null }));
+        } else if (keyToSave) {
+          payload.openrouterApiKey = keyToSave;
+          saveClientApiKey('openrouter', keyToSave, form.customModel);
+          setLocalKeys((p) => ({ ...p, openrouter: keyToSave }));
+        }
       }
 
       const res = await fetch('/api/settings', {
@@ -315,13 +396,17 @@ export default function SettingsPage() {
     try {
       const provider = form.aiProvider;
       let activeKeyInput = '';
-      if (provider === 'gemini') activeKeyInput = form.geminiApiKey;
-      else if (provider === 'openai') activeKeyInput = form.openaiApiKey;
-      else if (provider === 'openrouter') activeKeyInput = form.openrouterApiKey;
+      if (provider === 'gemini') activeKeyInput = form.geminiApiKey || localKeys.gemini || '';
+      else if (provider === 'openai') activeKeyInput = form.openaiApiKey || localKeys.openai || '';
+      else if (provider === 'openrouter')
+        activeKeyInput = form.openrouterApiKey || localKeys.openrouter || '';
 
       const res = await fetch('/api/settings/test-key', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localKeys[provider] ? { 'x-user-api-key': localKeys[provider] } : {}),
+        },
         body: JSON.stringify({
           provider,
           apiKey: activeKeyInput || undefined,
@@ -356,16 +441,19 @@ export default function SettingsPage() {
 
   const activeProviderMeta = PROVIDER_METADATA[form.aiProvider];
 
-  // Helper to check if the currently selected provider has a saved key in the DB
+  // Helper to check if currently selected provider has a saved key (either in localStorage or in the DB)
+  const hasLocalKey = Boolean(localKeys[form.aiProvider]);
   const hasSavedKeyForProvider =
-    form.aiProvider === 'gemini'
+    hasLocalKey ||
+    (form.aiProvider === 'gemini'
       ? settings?.hasGeminiApiKey && !form.removeGeminiApiKey
       : form.aiProvider === 'openai'
         ? settings?.hasOpenaiApiKey && !form.removeOpenaiApiKey
-        : settings?.hasOpenrouterApiKey && !form.removeOpenrouterApiKey;
+        : settings?.hasOpenrouterApiKey && !form.removeOpenrouterApiKey);
 
-  const maskedKeyForProvider =
-    form.aiProvider === 'gemini'
+  const maskedKeyForProvider = localKeys[form.aiProvider]
+    ? maskApiKey(localKeys[form.aiProvider])
+    : form.aiProvider === 'gemini'
       ? settings?.geminiApiKeyMasked
       : form.aiProvider === 'openai'
         ? settings?.openaiApiKeyMasked
@@ -484,12 +572,15 @@ export default function SettingsPage() {
                         {activeProviderMeta.name} Connected
                       </span>
                       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-                        <Check className="h-3 w-3" /> Saved in Database
+                        <Check className="h-3 w-3" /> Saved in Browser &amp; Database
                       </span>
                     </div>
                     <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                       Stored Key:{' '}
                       <span className="font-semibold text-foreground">{maskedKeyForProvider}</span>
+                      <span className="ml-2 font-sans text-[10px] font-medium text-emerald-400/90">
+                        (Active in localStorage)
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -521,6 +612,8 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={async () => {
+                      removeClientApiKey(form.aiProvider);
+                      setLocalKeys((p) => ({ ...p, [form.aiProvider]: null }));
                       const payload: Record<string, any> = { aiProvider: form.aiProvider };
                       if (form.aiProvider === 'gemini') payload.removeGeminiApiKey = true;
                       if (form.aiProvider === 'openai') payload.removeOpenaiApiKey = true;
@@ -644,7 +737,7 @@ export default function SettingsPage() {
 
                 <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>Persisted in private PostgreSQL record</span>
+                  <span>Stored locally in browser (localStorage) &amp; synced to database</span>
                 </div>
               </div>
             </div>
@@ -656,8 +749,8 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-medium text-emerald-400 animate-in fade-in">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
             <span>
-              API key saved successfully to your database record! It is now permanently active
-              across sessions and page refreshes.
+              API key saved successfully to your browser storage (localStorage) and database record!
+              It is immediately active and will never be lost on refresh.
             </span>
           </div>
         )}

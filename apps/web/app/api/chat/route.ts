@@ -76,13 +76,26 @@ export async function POST(req: NextRequest) {
     fen,
   });
 
-  // Determine active AI provider and key
-  const provider = (dbUser.aiProvider || 'gemini') as AiProvider;
-  let customKey: string | null = null;
-  if (provider === 'gemini') customKey = dbUser.geminiApiKey;
-  else if (provider === 'openai') customKey = dbUser.openaiApiKey;
-  else if (provider === 'openrouter') customKey = dbUser.openrouterApiKey;
+  // Extract client-side browser key and provider if passed in headers
+  const headerKey = req.headers.get('x-user-api-key')?.trim();
+  const headerProvider = req.headers.get('x-user-ai-provider')?.trim() as AiProvider | null;
+  const headerModel = req.headers.get('x-user-custom-model')?.trim();
 
+  // Determine active AI provider and key (Client browser headers take precedence, fallback to database)
+  const provider = (
+    headerProvider && ['gemini', 'openai', 'openrouter'].includes(headerProvider)
+      ? headerProvider
+      : dbUser.aiProvider || 'gemini'
+  ) as AiProvider;
+
+  let customKey: string | null = headerKey || null;
+  if (!customKey) {
+    if (provider === 'gemini') customKey = dbUser.geminiApiKey;
+    else if (provider === 'openai') customKey = dbUser.openaiApiKey;
+    else if (provider === 'openrouter') customKey = dbUser.openrouterApiKey;
+  }
+
+  const modelOverride = headerModel || dbUser.customModel || undefined;
   const apiKey = resolveApiKey(provider, customKey);
 
   if (!apiKey) {
@@ -115,7 +128,7 @@ export async function POST(req: NextRequest) {
         const streamGenerator = streamLlmResponse({
           provider,
           apiKey,
-          customModel: dbUser.customModel,
+          customModel: modelOverride || dbUser.customModel,
           systemPrompt,
           history: chatHistory,
           message,
