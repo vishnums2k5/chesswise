@@ -68,6 +68,10 @@ async function getEvalWithBest(
 ): Promise<StockfishResult> {
   return new Promise((resolve, reject) => {
     const sf = spawnStockfish();
+    if (!sf.stdin || !sf.stdout) {
+      reject(new Error('Failed to initialize Stockfish stdio streams'));
+      return;
+    }
 
     let evalCp: number | null = null;
     let bestMove: string | null = null;
@@ -75,7 +79,7 @@ async function getEvalWithBest(
 
     const timeout = setTimeout(() => {
       if (!done) {
-        sf.stdin.write('stop\n');
+        sf.stdin?.write('stop\n');
       }
     }, timeLimitMs);
 

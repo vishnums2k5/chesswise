@@ -90,12 +90,17 @@ export async function POST(req: NextRequest) {
 
     await Promise.race([addJobPromise, timeoutPromise]);
   } catch (err) {
-    console.warn('[import] Redis not available — job not queued:', err);
-    // Game stays in QUEUED state; worker can pick it up when Redis is available
+    console.warn('[import] Redis not available — game saved in QUEUED state:', err);
   } finally {
     if (queue) {
       queue.close().catch(() => {});
     }
+  }
+
+  // Trigger Render analysis worker via HTTP if configured
+  const workerUrl = process.env.ANALYSIS_WORKER_URL;
+  if (workerUrl) {
+    fetch(`${workerUrl.replace(/\/$/, '')}/analyze`, { method: 'POST' }).catch(() => {});
   }
 
   return NextResponse.json({ gameId: game.id, status: 'QUEUED' }, { status: 201 });

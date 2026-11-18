@@ -5,8 +5,8 @@
   "scripts": {
     "analyze": "tsx --env-file=../../.env.local src/process-queued.ts",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "tsc --noEmit",
+    "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -15,7 +15,6 @@
     "@chesswise/typescript-config": "workspace:*",
     "@types/node": "^22.0.0",
     "eslint": "^9.0.0",
-    "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^5.1.0"
   },
@@ -27,6 +26,7 @@
     "chess.js": "^1.4.0",
     "ioredis": "^6.0.0",
     "stockfish": "^18.0.8",
+    "tsx": "^4.19.0",
     "zod": "^4.6.5"
   }
 }
