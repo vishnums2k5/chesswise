@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: pnpm install --frozen-lockfile=false && pnpm --filter @chesswise/database db:generate
+    buildCommand: npm i -g pnpm && pnpm install --frozen-lockfile=false && pnpm --filter @chesswise/database db:generate
     startCommand: pnpm --filter @chesswise/analysis-worker start
     healthCheckPath: /health
     envVars:
