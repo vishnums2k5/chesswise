@@ -287,9 +287,7 @@ function MistakeCard({
 
         {onExplore && (
           <button
-            onClick={() =>
-              onExplore(move.fenBefore, `${Math.ceil(move.moveNumber / 2)}. ${move.san}`)
-            }
+            onClick={() => onExplore(move.fenBefore, `${move.moveNumber}. ${move.san}`)}
             className="flex items-center gap-1 text-xs font-semibold text-purple-400 hover:underline"
           >
             <GitFork className="h-3 w-3" />
@@ -424,7 +422,7 @@ export default function ReportPage() {
     } else {
       text += `Across the match, you made ${mistakeCount} inaccuracies or mistakes. `;
       if (topBlunder) {
-        text += `The turning point arrived on move ${Math.ceil(topBlunder.moveNumber / 2)}, where you played ${topBlunder.san}. `;
+        text += `The turning point arrived on move ${topBlunder.moveNumber}, where you played ${topBlunder.san}. `;
         if (topBlunder.explanation) {
           text += topBlunder.explanation;
         }
@@ -637,7 +635,7 @@ export default function ReportPage() {
 
             <span className="font-mono text-xs font-semibold text-foreground">
               {currentMoveIdx >= 0 && currentMove
-                ? `Move ${Math.ceil(currentMove.moveNumber / 2)}${currentMove.color === 'b' ? '...' : '.'} ${currentMove.san}`
+                ? `Move ${currentMove.moveNumber}${currentMove.color === 'b' ? '...' : '.'} ${currentMove.san}`
                 : 'Start Position'}
             </span>
 
