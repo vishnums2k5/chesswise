@@ -126,6 +126,35 @@ export default function PlayPage() {
       })()
     : null;
 
+  const getEnrichedPgn = useCallback(() => {
+    const isBotWhite = engineColor === 'w';
+    const botName = `${difficulty.label} Bot`;
+    const playerName = 'You';
+    const result = chess.isCheckmate
+      ? chess.turn === 'w'
+        ? '0-1'
+        : '1-0'
+      : chess.isDraw
+        ? '1/2-1/2'
+        : '*';
+
+    chess.game.header(
+      'White',
+      isBotWhite ? botName : playerName,
+      'Black',
+      isBotWhite ? playerName : botName,
+      'Date',
+      (new Date().toISOString().split('T')[0] ?? '').replace(/-/g, '.'),
+      'Event',
+      'Chesswise Play AI',
+      'Site',
+      'chesswise-web.vercel.app',
+      'Result',
+      result,
+    );
+    return chess.game.pgn();
+  }, [chess.game, chess.isCheckmate, chess.isDraw, chess.turn, difficulty.label, engineColor]);
+
   // Handle Game Over status updates
   useEffect(() => {
     if (!chess.isGameOver) {
@@ -146,7 +175,7 @@ export default function PlayPage() {
     setHintText('');
 
     // Auto-save the game in background
-    const pgn = chess.game.pgn();
+    const pgn = getEnrichedPgn();
     fetch('/api/games/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -168,6 +197,7 @@ export default function PlayPage() {
     chess.isGameOver,
     engine,
     chess.game,
+    getEnrichedPgn,
   ]);
 
   // Engine triggers on its turn
@@ -219,7 +249,7 @@ export default function PlayPage() {
     }
     setAnalyzingGame(true);
     try {
-      const pgn = chess.game.pgn();
+      const pgn = getEnrichedPgn();
       const res = await fetch('/api/games/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Square } from '@chesswise/chess-core';
+import { Square, Chess } from '@chesswise/chess-core';
 import { useChess } from '@/hooks/use-chess';
 import ChessBoard from '@/components/chess/chess-board';
 import { AnnotationGlyph } from '@/components/chess/annotation-glyph';
@@ -340,6 +340,11 @@ function MistakeCard({
   );
 }
 
+function cleanHeader(val?: string, fallback = 'Unknown'): string {
+  if (!val || val === '?' || val.startsWith('???')) return fallback;
+  return val;
+}
+
 export default function ReportPage() {
   const params = useParams();
   const router = useRouter();
@@ -355,6 +360,41 @@ export default function ReportPage() {
   const [isPlayingRecap, setIsPlayingRecap] = useState(false);
 
   const chess = useChess();
+  const pgnLoadedRef = useRef(false);
+
+  // Replay moves from PGN to allow navigation even when worker analysis is queued
+  const pgnMoves = useMemo(() => {
+    if (!game?.pgn) return [];
+    try {
+      const c = new Chess();
+      c.loadPgn(game.pgn);
+      const history = c.history({ verbose: true }) as any[];
+      return history.map((m, idx) => ({
+        id: `pgn-${idx}`,
+        moveNumber: Math.ceil((idx + 1) / 2),
+        color: m.color,
+        san: m.san,
+        uci: `${m.from}${m.to}${m.promotion || ''}`,
+        fenBefore: m.before || '',
+        evalBefore: null,
+        evalAfter: null,
+        evalDelta: null,
+        quality: null,
+        tacticTag: null,
+        bestMoveSan: null,
+        explanation: null,
+      })) as GameMove[];
+    } catch {
+      return [];
+    }
+  }, [game?.pgn]);
+
+  const effectiveMoves = game?.moves && game.moves.length > 0 ? game.moves : pgnMoves;
+  const isAnalyzing =
+    !game ||
+    game.status === 'QUEUED' ||
+    game.status === 'PROCESSING' ||
+    (game.moves.length === 0 && game.status !== 'ANALYSIS_COMPLETE');
 
   const handlePlayRecap = useCallback(() => {
     if (!game) return;
@@ -366,10 +406,12 @@ export default function ReportPage() {
     }
 
     setIsPlayingRecap(true);
-    const mistakeCount = game.moves.filter((m) =>
+    const mistakeCount = effectiveMoves.filter((m) =>
       ['MISTAKE', 'BLUNDER', 'INACCURACY'].includes(m.quality || ''),
     ).length;
-    const topBlunder = game.moves.find((m) => m.quality === 'BLUNDER' || m.quality === 'MISTAKE');
+    const topBlunder = effectiveMoves.find(
+      (m) => m.quality === 'BLUNDER' || m.quality === 'MISTAKE',
+    );
 
     let text = `Here is your game recap. `;
     const openingName = game.headers['Opening'];
@@ -392,22 +434,56 @@ export default function ReportPage() {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.onend = () => setIsPlayingRecap(false);
     window.speechSynthesis.speak(utterance);
-  }, [game, isPlayingRecap]);
+  }, [game, effectiveMoves, isPlayingRecap]);
 
   useEffect(() => {
     if (!gameId) return;
-    fetch(`/api/games/${gameId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setGame(data.game);
-        if (data.game?.pgn) {
-          chess.loadPgn(data.game.pgn);
-          setCurrentMoveIdx(data.game.moves.length - 1);
-        }
-      })
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId]);
+    let isSubscribed = true;
+
+    const fetchGame = () => {
+      fetch(`/api/games/${gameId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!isSubscribed) return;
+          setGame(data.game);
+          if (data.game?.pgn && !pgnLoadedRef.current) {
+            pgnLoadedRef.current = true;
+            chess.loadPgn(data.game.pgn);
+          }
+        })
+        .finally(() => {
+          if (isSubscribed) setLoading(false);
+        });
+    };
+
+    fetchGame();
+
+    const interval = setInterval(() => {
+      if (
+        game &&
+        ![
+          'ANALYSIS_COMPLETE',
+          'EXPLANATION_READY',
+          'PROFILE_UPDATED',
+          'PROCESSING_FAILED',
+        ].includes(game.status)
+      ) {
+        fetchGame();
+      }
+    }, 4000);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [gameId, game?.status, chess]);
+
+  // Sync initial move index once moves are resolved
+  useEffect(() => {
+    if (effectiveMoves.length > 0 && currentMoveIdx === -1) {
+      setCurrentMoveIdx(effectiveMoves.length - 1);
+    }
+  }, [effectiveMoves.length, currentMoveIdx]);
 
   const seekToMove = useCallback(
     (idx: number) => {
@@ -455,13 +531,13 @@ export default function ReportPage() {
   }
 
   const h = game.headers;
-  const mistakes = game.moves.filter((m) => m.quality === 'MISTAKE' || m.quality === 'BLUNDER');
-  const currentMove = game.moves[currentMoveIdx];
+  const mistakes = effectiveMoves.filter((m) => m.quality === 'MISTAKE' || m.quality === 'BLUNDER');
+  const currentMove = currentMoveIdx >= 0 ? effectiveMoves[currentMoveIdx] : null;
   const lastMove =
-    currentMoveIdx >= 0 && game.moves[currentMoveIdx]
+    currentMoveIdx >= 0 && effectiveMoves[currentMoveIdx]
       ? {
-          from: game.moves[currentMoveIdx]!.uci.slice(0, 2) as Square,
-          to: game.moves[currentMoveIdx]!.uci.slice(2, 4) as Square,
+          from: effectiveMoves[currentMoveIdx]!.uci.slice(0, 2) as Square,
+          to: effectiveMoves[currentMoveIdx]!.uci.slice(2, 4) as Square,
         }
       : null;
 
@@ -472,18 +548,19 @@ export default function ReportPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-serif text-xl font-bold text-foreground sm:text-2xl">
-              {h['White'] ?? 'White'} <span className="text-sm text-muted-foreground">vs</span>{' '}
-              {h['Black'] ?? 'Black'}
+              {cleanHeader(h['White'], 'White')}{' '}
+              <span className="text-sm text-muted-foreground">vs</span>{' '}
+              {cleanHeader(h['Black'], 'Black')}
             </h1>
             <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs font-semibold text-muted-foreground">
-              {h['Result'] ?? '*'}
+              {cleanHeader(h['Result'], '*')}
             </span>
           </div>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            <span>{h['Date'] ?? 'Recent'}</span>
+            <span>{cleanHeader(h['Date'], 'Recent')}</span>
             <span>•</span>
-            <span>{h['Event'] ?? 'Casual Match'}</span>
+            <span>{cleanHeader(h['Event'], 'Casual Match')}</span>
             {h['Opening'] && (
               <>
                 <span>•</span>
@@ -566,16 +643,16 @@ export default function ReportPage() {
 
             <div className="flex items-center gap-1">
               <button
-                onClick={() => seekToMove(Math.min(game.moves.length - 1, currentMoveIdx + 1))}
-                disabled={currentMoveIdx >= game.moves.length - 1}
+                onClick={() => seekToMove(Math.min(effectiveMoves.length - 1, currentMoveIdx + 1))}
+                disabled={currentMoveIdx >= effectiveMoves.length - 1}
                 className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
                 title="Next move"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
               <button
-                onClick={() => seekToMove(game.moves.length - 1)}
-                disabled={currentMoveIdx >= game.moves.length - 1}
+                onClick={() => seekToMove(effectiveMoves.length - 1)}
+                disabled={currentMoveIdx >= effectiveMoves.length - 1}
                 className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
                 title="Final move"
               >
@@ -588,19 +665,19 @@ export default function ReportPage() {
         {/* Right Column: Eval Curve, Move History, & Mistake Cards */}
         <div className="space-y-4">
           {/* Interactive Advantage Curve */}
-          {game.moves.length > 0 && (
+          {game.moves && game.moves.length > 0 && (
             <EvalGraph moves={game.moves} currentIdx={currentMoveIdx} onSeek={seekToMove} />
           )}
 
           {/* Scoresheet Move Ledger */}
           <div className="overflow-hidden rounded-xl border border-border/60 bg-card/70 backdrop-blur-sm">
             <div className="border-b border-border/50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Game Scoresheet ({game.moves.length} plies)
+              Game Scoresheet ({effectiveMoves.length} plies)
             </div>
             <div className="max-h-48 overflow-y-auto p-3 font-mono text-xs leading-relaxed">
-              {Array.from({ length: Math.ceil(game.moves.length / 2) }).map((_, pairIdx) => {
-                const wMove = game.moves[pairIdx * 2];
-                const bMove = game.moves[pairIdx * 2 + 1];
+              {Array.from({ length: Math.ceil(effectiveMoves.length / 2) }).map((_, pairIdx) => {
+                const wMove = effectiveMoves[pairIdx * 2];
+                const bMove = effectiveMoves[pairIdx * 2 + 1];
                 return (
                   <span key={pairIdx} className="mr-3 inline-block">
                     <span className="text-muted-foreground/60">{pairIdx + 1}. </span>
@@ -647,7 +724,19 @@ export default function ReportPage() {
           </div>
 
           {/* Mistake Ledger */}
-          {mistakes.length > 0 ? (
+          {isAnalyzing ? (
+            <div className="flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-amber-400">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                <span>Deep Engine Analysis Queued</span>
+              </div>
+              <p className="leading-relaxed text-muted-foreground">
+                The Stockfish engine background worker is evaluating move accuracy, detecting
+                blunders, and calculating advantage curves. Your scoresheet and board moves are
+                interactive above while evaluation finishes.
+              </p>
+            </div>
+          ) : mistakes.length > 0 ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">

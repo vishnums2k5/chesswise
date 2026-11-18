@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Chess, Square, Move, PieceSymbol } from '@chesswise/chess-core';
 import { useChessSound } from './use-chess-sound';
 
@@ -27,6 +27,7 @@ export function useChess(startFen?: string, storageKey?: string): UseChessReturn
   const [game, setGame] = useState<Chess>(() => (startFen ? new Chess(startFen) : new Chess()));
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [isLoaded, setIsLoaded] = useState(false);
+  const fullHistoryRef = useRef<Move[]>([]);
   const playSound = useChessSound();
 
   // Load from localStorage on mount if storageKey is provided
@@ -38,6 +39,7 @@ export function useChess(startFen?: string, storageKey?: string): UseChessReturn
           const fresh = new Chess();
           fresh.loadPgn(savedPgn);
           setGame(fresh);
+          fullHistoryRef.current = fresh.history({ verbose: true }) as Move[];
           setHistoryIndex(fresh.history().length - 1);
         } catch {
           console.error('Failed to parse saved chess game');
@@ -119,6 +121,7 @@ export function useChess(startFen?: string, storageKey?: string): UseChessReturn
   const resetGame = useCallback((fen?: string) => {
     const fresh = fen ? new Chess(fen) : new Chess();
     setGame(fresh);
+    fullHistoryRef.current = [];
     setHistoryIndex(-1);
   }, []);
 
@@ -127,7 +130,8 @@ export function useChess(startFen?: string, storageKey?: string): UseChessReturn
       const next = new Chess();
       next.loadPgn(pgn);
       setGame(next);
-      setHistoryIndex(next.history().length - 1);
+      fullHistoryRef.current = next.history({ verbose: true }) as Move[];
+      setHistoryIndex(fullHistoryRef.current.length - 1);
       return true;
     } catch {
       return false;
@@ -138,6 +142,7 @@ export function useChess(startFen?: string, storageKey?: string): UseChessReturn
     try {
       const next = new Chess(fen);
       setGame(next);
+      fullHistoryRef.current = [];
       setHistoryIndex(-1);
       return true;
     } catch {
@@ -147,7 +152,11 @@ export function useChess(startFen?: string, storageKey?: string): UseChessReturn
 
   const seekTo = useCallback((index: number) => {
     setGame((prev) => {
-      const allMoves = prev.history({ verbose: true }) as Move[];
+      const currentHist = prev.history({ verbose: true }) as Move[];
+      if (fullHistoryRef.current.length < currentHist.length) {
+        fullHistoryRef.current = currentHist;
+      }
+      const allMoves = fullHistoryRef.current.length > 0 ? fullHistoryRef.current : currentHist;
       const fresh = new Chess();
       for (let i = 0; i <= index && i < allMoves.length; i++) {
         fresh.move(allMoves[i]!);
