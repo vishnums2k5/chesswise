@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import { resolve } from 'path';
 
 export interface MoveAnalysis {
@@ -67,9 +67,7 @@ async function getEvalWithBest(
   timeLimitMs: number,
 ): Promise<StockfishResult> {
   return new Promise((resolve, reject) => {
-    // Find stockfish binary in node_modules
-    const stockfishBin = findStockfishBin();
-    const sf = spawn(stockfishBin);
+    const sf = spawnStockfish();
 
     let evalCp: number | null = null;
     let bestMove: string | null = null;
@@ -119,13 +117,14 @@ async function getEval(fen: string, depth: number, timeLimitMs: number): Promise
   return result.evalCp;
 }
 
-function findStockfishBin(): string {
-  // Try common locations
+function spawnStockfish(): ChildProcess {
+  if (process.env.STOCKFISH_PATH) {
+    return spawn(process.env.STOCKFISH_PATH);
+  }
   try {
-    // From node_modules stockfish package
-    const p = resolve(process.cwd(), 'node_modules/.bin/stockfish');
-    return p;
+    const scriptPath = require.resolve('stockfish/bin/stockfish.js');
+    return spawn(process.execPath, [scriptPath]);
   } catch {
-    return 'stockfish'; // fallback to system PATH
+    return spawn('stockfish');
   }
 }

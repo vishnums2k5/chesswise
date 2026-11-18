@@ -5,16 +5,25 @@ import { analyzePosition } from './stockfish-analyzer';
 import { classifyTactic } from './tactic-tagger';
 import { explainMistake } from './llm-explainer';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DIRECT_URL || process.env.DATABASE_URL,
+});
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
-const ANALYSIS_DEPTH = parseInt(process.env.ANALYSIS_DEPTH ?? '20');
+const ANALYSIS_DEPTH = parseInt(process.env.ANALYSIS_DEPTH ?? '14');
 
-const connection = {
-  url: REDIS_URL,
+let _gameQueue: Queue | null = null;
+export function getGameQueue(): Queue {
+  if (!_gameQueue) {
+    _gameQueue = new Queue('game-analysis', { connection: { url: REDIS_URL } });
+  }
+  return _gameQueue;
+}
+
+export const gameQueue = {
+  add: (...args: Parameters<Queue['add']>) => getGameQueue().add(...args),
+  close: () => (_gameQueue ? _gameQueue.close() : Promise.resolve()),
 };
-
-export const gameQueue = new Queue('game-analysis', { connection: { url: REDIS_URL } });
 
 /**
  * Maps centipawn loss (from the player's perspective) to a quality label.
@@ -41,6 +50,9 @@ async function processGame(gameId: string): Promise<void> {
     where: { id: gameId },
     data: { status: GameStatus.PROCESSING },
   });
+
+  // Ensure idempotent re-analysis
+  await prisma.gameMove.deleteMany({ where: { gameId } });
 
   const game = await prisma.game.findUnique({ where: { id: gameId } });
   if (!game) throw new Error(`Game ${gameId} not found`);
@@ -82,23 +94,32 @@ async function processGame(gameId: string): Promise<void> {
       );
       const playerColor = move.color as 'w' | 'b';
 
-      // evalBefore = best eval from position before move (from mover's perspective)
-      const evalBefore =
-        analysis.evalBefore !== null ? normalizeCp(analysis.evalBefore, playerColor) : null;
-      // evalAfter = eval of position after move was played (now opponent's turn)
-      const evalAfter =
-        analysis.evalAfter !== null
-          ? normalizeCp(analysis.evalAfter, playerColor === 'w' ? 'b' : 'w')
-          : null;
-
-      // Centipawn loss: how much worse the position became for the mover
+      // Stockfish UCI returns scores from the perspective of the side to move:
+      // - analysis.evalBefore is from the mover's perspective
+      // - analysis.evalAfter is from the opponent's perspective (since it is opponent's turn after the move)
+      // Therefore, the mover's position after the move is -analysis.evalAfter.
+      // Centipawn loss = mover advantage before - mover advantage after:
       const cpLoss =
-        evalBefore !== null && evalAfter !== null
-          ? evalBefore - -evalAfter // evalBefore is "our" perspective, evalAfter is opponent perspective
+        analysis.evalBefore !== null && analysis.evalAfter !== null
+          ? Math.max(0, analysis.evalBefore + analysis.evalAfter)
           : 0;
 
+      // In database and EvalGraph UI, store evaluations always normalized from White's perspective:
+      const evalBefore =
+        analysis.evalBefore !== null
+          ? playerColor === 'w'
+            ? analysis.evalBefore
+            : -analysis.evalBefore
+          : null;
+      const evalAfter =
+        analysis.evalAfter !== null
+          ? playerColor === 'w'
+            ? -analysis.evalAfter
+            : analysis.evalAfter
+          : null;
+
       const isBestMove = analysis.bestMoveUci === (move.uci ?? `${move.from}${move.to}`);
-      const quality = cpLossToQuality(Math.max(0, cpLoss), isBestMove);
+      const quality = cpLossToQuality(cpLoss, isBestMove);
 
       const tacticTag =
         quality === MoveQuality.MISTAKE || quality === MoveQuality.BLUNDER
@@ -116,12 +137,9 @@ async function processGame(gameId: string): Promise<void> {
         san: move.san,
         uci: move.uci ?? `${move.from}${move.to}${move.promotion ?? ''}`,
         fenBefore: fen,
-        evalBefore: analysis.evalBefore,
-        evalAfter: analysis.evalAfter,
-        evalDelta:
-          analysis.evalAfter !== null && analysis.evalBefore !== null
-            ? analysis.evalAfter - analysis.evalBefore
-            : null,
+        evalBefore,
+        evalAfter,
+        evalDelta: evalAfter !== null && evalBefore !== null ? evalAfter - evalBefore : null,
         quality,
         tacticTag,
         bestMoveSan: analysis.bestMoveSan,
@@ -217,6 +235,9 @@ async function processGame(gameId: string): Promise<void> {
         });
       }
     }
+
+    // Small delay to respect free-tier LLM rate limits
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
   await prisma.game.update({
@@ -402,33 +423,39 @@ async function updateSkillProfile(userId: string, gameId: string): Promise<void>
   });
 }
 
-// Start the BullMQ worker
-const worker = new Worker(
-  'game-analysis',
-  async (job) => {
-    const { gameId } = job.data as { gameId: string };
-    await processGame(gameId);
-  },
-  { connection: { url: REDIS_URL }, concurrency: 2 },
-);
+let worker: Worker | null = null;
 
-worker.on('completed', (job) => {
-  console.log(`[worker] Job ${job.id} completed`);
-});
+export function startWorker(): Worker {
+  if (worker) return worker;
+  worker = new Worker(
+    'game-analysis',
+    async (job) => {
+      const { gameId } = job.data as { gameId: string };
+      await processGame(gameId);
+    },
+    { connection: { url: REDIS_URL }, concurrency: 2 },
+  );
 
-worker.on('failed', async (job, err) => {
-  console.error(`[worker] Job ${job?.id} failed:`, err);
-  if (job?.data?.gameId) {
-    await prisma.game
-      .update({
-        where: { id: job.data.gameId },
-        data: {
-          status: GameStatus.PROCESSING_FAILED,
-          errorMsg: err.message,
-        },
-      })
-      .catch(console.error);
-  }
-});
+  worker.on('completed', (job) => {
+    console.log(`[worker] Job ${job.id} completed`);
+  });
 
-export { worker, processGame };
+  worker.on('failed', async (job, err) => {
+    console.error(`[worker] Job ${job?.id} failed:`, err);
+    if (job?.data?.gameId) {
+      await prisma.game
+        .update({
+          where: { id: job.data.gameId },
+          data: {
+            status: GameStatus.PROCESSING_FAILED,
+            errorMsg: err.message,
+          },
+        })
+        .catch(console.error);
+    }
+  });
+
+  return worker;
+}
+
+export { worker, processGame, prisma };

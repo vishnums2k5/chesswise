@@ -2,6 +2,7 @@
   "name": "chesswise",
   "private": true,
   "scripts": {
+    "analyze": "pnpm --filter @chesswise/analysis-worker analyze",
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
