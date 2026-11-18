@@ -44,10 +44,10 @@ export async function processNextQueuedGame(): Promise<boolean> {
 }
 
 // 1. Health check HTTP server for Render Web Service
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+const server = http.createServer((req, res) => {
+  const pathname = req.url?.split('?')[0] || '/';
 
-  if (url.pathname === '/health' || url.pathname === '/') {
+  if (pathname === '/health' || pathname === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
@@ -60,8 +60,8 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === '/analyze') {
-    // Trigger immediate background process
+  if (pathname === '/analyze') {
+    // Trigger immediate background processing
     processNextQueuedGame().catch(console.error);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ message: 'Analysis triggered', isProcessing }));
@@ -86,10 +86,23 @@ if (REDIS_URL) {
   }
 }
 
-// 3. Continuous background database poller
-setInterval(async () => {
-  await processNextQueuedGame();
-}, POLL_INTERVAL_MS);
+// 3. Reset any games that were stuck in PROCESSING on boot
+prisma.game
+  .updateMany({
+    where: { status: 'PROCESSING' },
+    data: { status: 'QUEUED' },
+  })
+  .then((res) => {
+    if (res.count > 0) {
+      console.log(`[analysis-worker] Reset ${res.count} stuck PROCESSING games back to QUEUED`);
+    }
+  })
+  .catch(console.error);
 
-// Run initial check on startup
-processNextQueuedGame().catch(console.error);
+// 4. Start background polling after 3s so initial deployment health check passes first
+setTimeout(() => {
+  setInterval(async () => {
+    await processNextQueuedGame();
+  }, POLL_INTERVAL_MS);
+  processNextQueuedGame().catch(console.error);
+}, 3000);
