@@ -17,7 +17,7 @@ export interface LlmRequestOptions {
 }
 
 export const DEFAULT_MODELS: Record<AiProvider, string> = {
-  gemini: 'gemini-1.5-flash',
+  gemini: 'gemini-2.5-flash',
   openai: 'gpt-4o-mini',
   openrouter: 'meta-llama/llama-3.3-70b-instruct',
 };

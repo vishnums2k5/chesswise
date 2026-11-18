@@ -35,7 +35,7 @@ describe('llm-provider (Multi-Provider BYOK Resolver)', () => {
   });
 
   it('provides sensible default models for all providers', () => {
-    expect(DEFAULT_MODELS.gemini).toBe('gemini-1.5-flash');
+    expect(DEFAULT_MODELS.gemini).toBe('gemini-2.5-flash');
     expect(DEFAULT_MODELS.openai).toBe('gpt-4o-mini');
     expect(DEFAULT_MODELS.openrouter).toBe('meta-llama/llama-3.3-70b-instruct');
   });

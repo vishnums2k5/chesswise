@@ -34,12 +34,12 @@ describe('client-byok localStorage manager', () => {
   });
 
   it('saves and retrieves an API key from localStorage', () => {
-    saveClientApiKey('gemini', 'AIzaSyTestKey123', 'gemini-1.5-flash');
+    saveClientApiKey('gemini', 'AIzaSyTestKey123', 'gemini-2.5-flash');
     expect(getClientApiKey('gemini')).toBe('AIzaSyTestKey123');
     const active = getActiveClientByok();
     expect(active.provider).toBe('gemini');
     expect(active.key).toBe('AIzaSyTestKey123');
-    expect(active.customModel).toBe('gemini-1.5-flash');
+    expect(active.customModel).toBe('gemini-2.5-flash');
   });
 
   it('removes an API key from localStorage', () => {
